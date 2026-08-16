@@ -31,14 +31,19 @@ export default function Orb({
   state,
   size = 240,
   label = true,
+  getLevel,
 }: {
   state: OrbState;
   size?: number;
   label?: boolean;
+  /** live microphone amplitude 0..1, read per frame — never triggers a re-render */
+  getLevel?: () => number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<OrbState>(state);
   const changedAtRef = useRef<number>(0);
+  const levelFnRef = useRef<(() => number) | undefined>(getLevel);
+  levelFnRef.current = getLevel;
 
   useEffect(() => {
     stateRef.current = state;
@@ -58,6 +63,7 @@ export default function Orb({
     let primary = hexToRgb(ORB_THEMES[stateRef.current].primary);
     let secondary = hexToRgb(ORB_THEMES[stateRef.current].secondary);
     let speed = ORB_THEMES[stateRef.current].speed;
+    let level = 0;
     let raf = 0;
     let mounted = true;
     const start = performance.now();
@@ -71,10 +77,13 @@ export default function Orb({
       speed = lerp(speed, theme.speed, ease);
 
       const t = (now - start) / 1000;
+      const rawLevel =
+        stateRef.current === "hoeren" ? Math.min(1, levelFnRef.current?.() ?? 0) : 0;
+      level = lerp(level, rawLevel, 0.22);
       const breath = Math.sin((t * Math.PI * 2) / speed);
       const cx = size / 2;
       const cy = size / 2;
-      const r = size * 0.33 * (1 + breath * 0.022);
+      const r = size * 0.33 * (1 + breath * 0.022 + level * 0.075);
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
@@ -110,10 +119,23 @@ export default function Orb({
       ctx.shadowColor = rgba(primary, 0.85);
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = rgba(primary, 0.68 + breath * 0.1);
-      ctx.lineWidth = Math.max(1.1, size * 0.006);
+      ctx.strokeStyle = rgba(primary, 0.68 + breath * 0.1 + level * 0.22);
+      ctx.lineWidth = Math.max(1.1, size * 0.006 + level * size * 0.004);
       ctx.stroke();
       ctx.restore();
+
+      // voice: a second ring that breathes with the microphone level
+      if (level > 0.01) {
+        ctx.save();
+        ctx.shadowBlur = size * 0.14 * level;
+        ctx.shadowColor = rgba(primary, 0.7);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * (1.2 + level * 0.22), 0, Math.PI * 2);
+        ctx.strokeStyle = rgba(primary, 0.1 + level * 0.4);
+        ctx.lineWidth = Math.max(1, size * 0.0035);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       // slowly rotating light structure
       const rot = t * (stateRef.current === "denken" ? 0.85 : 0.28);

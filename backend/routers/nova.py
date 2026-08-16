@@ -15,7 +15,7 @@ from lib.db import db
 
 router = APIRouter()
 
-ORB_STATES = ["idle", "denken", "antworten", "erfolg", "warnung", "fehler"]
+ORB_STATES = ["idle", "hoeren", "denken", "antworten", "erfolg", "warnung", "fehler"]
 
 APP_IDS = ["chat", "browser", "files", "memory", "schule", "notizen", "einstellungen"]
 

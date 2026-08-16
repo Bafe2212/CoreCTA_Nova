@@ -18,6 +18,7 @@ import {
   type OrbState,
 } from "@/lib/nova";
 import { DOCK_HEIGHT, useViewport, useWindowManager } from "@/hooks/useWindowManager";
+import { useVoice } from "@/hooks/useVoice";
 
 const ORB_SIZE = 240;
 const DOCK_SCALE = 0.28;
@@ -78,6 +79,50 @@ export default function Home() {
     [command],
   );
 
+  const voice = useVoice(send);
+  const longPress = useRef(false);
+  const pressTimer = useRef(0);
+
+  // voice errors surface as NOVA's error state, then settle back to idle
+  useEffect(() => {
+    if (!voice.error) return;
+    setNotice(voice.error);
+    setOrbState("fehler");
+    const t = window.setTimeout(() => setOrbState("idle"), 3200);
+    return () => window.clearTimeout(t);
+  }, [voice.error]);
+
+  const displayState: OrbState = voice.listening ? "hoeren" : orbState;
+
+  const openMenu = useCallback(() => {
+    longPress.current = true;
+    setMenuOpen((v) => !v);
+  }, []);
+
+  const onOrbPressStart = useCallback(() => {
+    longPress.current = false;
+    pressTimer.current = window.setTimeout(openMenu, 450);
+  }, [openMenu]);
+
+  const onOrbPressEnd = useCallback(() => {
+    window.clearTimeout(pressTimer.current);
+  }, []);
+
+  const onOrbClick = useCallback(() => {
+    if (longPress.current) {
+      longPress.current = false;
+      return;
+    }
+    if (!voice.supported) {
+      setNotice("Dieser Browser kann nicht zuhören — tippe deinen Befehl ein.");
+      setMenuOpen((v) => !v);
+      return;
+    }
+    setMenuOpen(false);
+    setNotice(null);
+    voice.toggle();
+  }, [voice]);
+
   // ⌘K / Ctrl+K palette, Esc closes palette → menu → topmost window
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,15 +133,16 @@ export default function Home() {
       }
       if (e.key === "Escape") {
         if (paletteOpen) setPaletteOpen(false);
+        else if (voice.listening) voice.stop();
         else if (menuOpen) setMenuOpen(false);
         else if (wm.activeId) wm.close(wm.activeId);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, menuOpen, wm]);
+  }, [paletteOpen, menuOpen, wm, voice]);
 
-  const theme = ORB_THEMES[orbState];
+  const theme = ORB_THEMES[displayState];
   const orbY = docked ? viewport.h - 100 - ORB_SIZE / 2 : viewport.h * 0.42 - ORB_SIZE / 2;
 
   return (
@@ -131,7 +177,7 @@ export default function Home() {
           className="font-mono text-[10.5px] tracking-[0.22em] text-muted-foreground/70 uppercase"
           data-testid="nova-state-indicator"
         >
-          {ORB_LABELS[orbState]}
+          {ORB_LABELS[displayState]}
         </span>
       </div>
       <span className="pointer-events-none absolute top-6 right-7 font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground/45 uppercase">
@@ -213,6 +259,19 @@ export default function Home() {
               </div>
             </form>
             <AnimatePresence>
+              {!voice.listening && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-7 font-mono text-[10px] tracking-[0.24em] text-muted-foreground/40 uppercase"
+                  data-testid="nova-voice-hint"
+                >
+                  Orb antippen, um zu sprechen
+                </motion.p>
+              )}
+            </AnimatePresence>
+            <AnimatePresence>
               {notice && (
                 <motion.p
                   initial={{ opacity: 0 }}
@@ -232,17 +291,55 @@ export default function Home() {
       {/* the orb — permanent anchor, transform-only between centre and dock */}
       <motion.button
         type="button"
-        aria-label="NOVA-Orb"
+        aria-label={voice.listening ? "Zuhören beenden" : "NOVA zuhören lassen"}
         data-testid="nova-orb"
         data-orb-mode={docked ? "dock" : "center"}
-        onClick={() => setMenuOpen((v) => !v)}
+        data-listening={voice.listening}
+        onClick={onOrbClick}
+        onPointerDown={onOrbPressStart}
+        onPointerUp={onOrbPressEnd}
+        onPointerCancel={onOrbPressEnd}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openMenu();
+        }}
         className="absolute top-0 left-1/2 z-[200] cursor-pointer rounded-full outline-none"
         style={{ width: ORB_SIZE, height: ORB_SIZE }}
         animate={{ x: -ORB_SIZE / 2, y: orbY, scale: docked ? DOCK_SCALE : 1 }}
         transition={{ type: "spring", stiffness: 190, damping: 24, mass: 0.9 }}
       >
-        <Orb state={orbState} size={ORB_SIZE} label={!docked} />
+        <Orb state={displayState} size={ORB_SIZE} label={!docked} getLevel={voice.getLevel} />
       </motion.button>
+
+      {/* live transcript while NOVA listens */}
+      <AnimatePresence>
+        {voice.listening && (
+          <motion.div
+            className="pointer-events-none absolute inset-x-0 z-[210] flex flex-col items-center gap-2 px-6"
+            style={{
+              top: docked ? undefined : viewport.h * 0.42 + ORB_SIZE / 2 + 178,
+              bottom: docked ? DOCK_HEIGHT + 18 : undefined,
+            }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.25 }}
+            data-testid="voice-listening-panel"
+          >
+            <span className="font-mono text-[10.5px] tracking-[0.28em] text-cyan-200/70 uppercase">
+              Ich höre zu …
+            </span>
+            {voice.transcript && (
+              <p
+                className="max-w-[520px] text-center text-[14px] text-foreground/85"
+                data-testid="voice-transcript"
+              >
+                {voice.transcript}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* orb menu: manual state control + quick actions */}
       <AnimatePresence>
@@ -282,6 +379,18 @@ export default function Home() {
               ))}
             </div>
             <div className="mt-4 flex items-center gap-4 border-t border-white/[0.05] pt-3">
+              <button
+                type="button"
+                data-testid="orb-menu-listen"
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (voice.supported) voice.toggle();
+                  else setNotice("Dieser Browser kann nicht zuhören — tippe deinen Befehl ein.");
+                }}
+                className="font-mono text-[11px] text-cyan-200/75 transition-colors duration-200 hover:text-cyan-100"
+              >
+                {voice.listening ? "Zuhören beenden" : "Zuhören starten"}
+              </button>
               <button
                 type="button"
                 data-testid="orb-menu-palette"

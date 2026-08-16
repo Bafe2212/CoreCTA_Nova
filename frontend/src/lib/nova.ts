@@ -27,6 +27,7 @@ export interface NovaMeta {
 
 export type OrbState =
   | "idle"
+  | "hoeren"
   | "denken"
   | "antworten"
   | "erfolg"
@@ -35,6 +36,7 @@ export type OrbState =
 
 export const ORB_STATES: OrbState[] = [
   "idle",
+  "hoeren",
   "denken",
   "antworten",
   "erfolg",
@@ -44,6 +46,7 @@ export const ORB_STATES: OrbState[] = [
 
 export const ORB_LABELS: Record<OrbState, string> = {
   idle: "Bereit",
+  hoeren: "Hören",
   denken: "Denken",
   antworten: "Antworten",
   erfolg: "Erfolg",
@@ -61,6 +64,7 @@ export interface OrbTheme {
 
 export const ORB_THEMES: Record<OrbState, OrbTheme> = {
   idle: { primary: "#06b6d4", secondary: "#3b82f6", glow: "rgba(6,182,212,0.40)", speed: 5.5 },
+  hoeren: { primary: "#67e8f9", secondary: "#e2f5ff", glow: "rgba(103,232,249,0.50)", speed: 3.2 },
   denken: { primary: "#8b5cf6", secondary: "#3b82f6", glow: "rgba(139,92,246,0.50)", speed: 2.6 },
   antworten: { primary: "#f8fafc", secondary: "#06b6d4", glow: "rgba(226,240,252,0.55)", speed: 1.9 },
   erfolg: { primary: "#22c55e", secondary: "#10b981", glow: "rgba(34,197,94,0.45)", speed: 3.4 },

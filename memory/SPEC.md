@@ -2,6 +2,13 @@
 
 Ruhiges, fast schwarzes „KI-Betriebssystem“. Kein Login, keine echte KI (Mock-Intents im Backend).
 
+## Sprachbefehl (Mikrofon)
+- Ein Klick auf den Orb startet/stoppt das Zuhören (`src/hooks/useVoice.ts`): Web Speech API (de-DE, interim results) für den Text + AnalyserNode-RMS für den Live-Pegel (in einem Ref, per `getLevel()` vom Orb pro Frame gelesen).
+- Orb-Zustand `hoeren` (Cyan-Weiß): Ring-Radius, Ringstärke und ein zweiter Ring reagieren live auf die Lautstärke.
+- Finales Transkript wird automatisch als Befehl an POST /api/nova/command geschickt → Fenster öffnet sich wie bei Texteingabe.
+- Fehlender Mikrofonzugriff / kein Browser-Support → Orb-Zustand `fehler` + Hinweistext, Texteingabe bleibt nutzbar (kein Blocker).
+- Orb-Menü (Zustände etc.) jetzt per Langdruck (450 ms) oder Rechtsklick auf den Orb; es enthält zusätzlich „Zuhören starten/beenden“. Esc stoppt zuerst das Zuhören.
+
 ## Kernflüsse
 1. Startscreen: zentraler Canvas-Orb (240px) + „Wie kann ich dir helfen?“ + minimalistisches Eingabefeld.
 2. Befehl senden → Orb-Zustand `denken` → POST /api/nova/command → `antworten` → passendes Fenster öffnet sich → `erfolg` → `idle`. Orb skaliert dabei auf 0.28 und wandert ins Dock (unten mittig).
