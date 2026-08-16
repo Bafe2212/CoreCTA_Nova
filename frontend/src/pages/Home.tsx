@@ -19,6 +19,7 @@ import {
 } from "@/lib/nova";
 import { DOCK_HEIGHT, useViewport, useWindowManager } from "@/hooks/useWindowManager";
 import { useVoice } from "@/hooks/useVoice";
+import { useSpeech } from "@/hooks/useSpeech";
 
 const ORB_SIZE = 240;
 const DOCK_SCALE = 0.28;
@@ -33,6 +34,7 @@ export default function Home() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [speechEnabled, setSpeechEnabled] = useState(true);
   const timers = useRef<number[]>([]);
 
   const docked = wm.windows.length > 0;
@@ -43,6 +45,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
+
+  const speech = useSpeech(speechEnabled);
 
   const history = useQuery({
     queryKey: ["nova", "history"],
@@ -63,6 +67,7 @@ export default function Home() {
       later(() => wm.open(target), 260);
       later(() => setOrbState("erfolg"), 1500);
       later(() => setOrbState("idle"), 2900);
+      speech.speak(result.reply);
     },
     onError: () => {
       setOrbState("fehler");
@@ -92,7 +97,11 @@ export default function Home() {
     return () => window.clearTimeout(t);
   }, [voice.error]);
 
-  const displayState: OrbState = voice.listening ? "hoeren" : orbState;
+  const displayState: OrbState = voice.listening
+    ? "hoeren"
+    : speech.speaking
+      ? "antworten"
+      : orbState;
 
   const openMenu = useCallback(() => {
     longPress.current = true;
@@ -120,8 +129,9 @@ export default function Home() {
     }
     setMenuOpen(false);
     setNotice(null);
+    speech.stop();
     voice.toggle();
-  }, [voice]);
+  }, [voice, speech]);
 
   // ⌘K / Ctrl+K palette, Esc closes palette → menu → topmost window
   useEffect(() => {
@@ -134,13 +144,14 @@ export default function Home() {
       if (e.key === "Escape") {
         if (paletteOpen) setPaletteOpen(false);
         else if (voice.listening) voice.stop();
+        else if (speech.speaking) speech.stop();
         else if (menuOpen) setMenuOpen(false);
         else if (wm.activeId) wm.close(wm.activeId);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, menuOpen, wm, voice]);
+  }, [paletteOpen, menuOpen, wm, voice, speech]);
 
   const theme = ORB_THEMES[displayState];
   const orbY = docked ? viewport.h - 100 - ORB_SIZE / 2 : viewport.h * 0.42 - ORB_SIZE / 2;
@@ -204,6 +215,17 @@ export default function Home() {
                 id={w.id}
                 orbState={orbState}
                 setOrbState={setOrbState}
+                speech={{
+                  supported: speech.supported,
+                  enabled: speechEnabled,
+                  speaking: speech.speaking,
+                  setEnabled: (v: boolean) => {
+                    setSpeechEnabled(v);
+                    if (!v) speech.stop();
+                  },
+                  test: () =>
+                    speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
+                }}
                 chat={{
                   history: history.data ?? [],
                   pending: command.isPending,
@@ -379,10 +401,22 @@ export default function Home() {
               ))}
             </div>
             <div className="mt-4 flex items-center gap-4 border-t border-white/[0.05] pt-3">
+              {speech.speaking && (
+                <button
+                  type="button"
+                  data-testid="orb-menu-stop-speech"
+                  onClick={() => {
+                    speech.stop();
+                    setMenuOpen(false);
+                  }}
+                  className="font-mono text-[11px] text-muted-foreground/70 transition-colors duration-200 hover:text-foreground"
+                >
+                  Vorlesen beenden
+                </button>
+              )}
               <button
                 type="button"
-                data-testid="orb-menu-listen"
-                onClick={() => {
+                data-testid="orb-menu-listen"                onClick={() => {
                   setMenuOpen(false);
                   if (voice.supported) voice.toggle();
                   else setNotice("Dieser Browser kann nicht zuhören — tippe deinen Befehl ein.");

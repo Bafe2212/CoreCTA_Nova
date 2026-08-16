@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Send, Sparkles } from "lucide-react";
+import { Search, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,14 @@ export interface ChatBridge {
   history: CommandResult[];
   pending: boolean;
   send: (prompt: string) => void;
+}
+
+export interface SpeechBridge {
+  supported: boolean;
+  enabled: boolean;
+  speaking: boolean;
+  setEnabled: (v: boolean) => void;
+  test: () => void;
 }
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -240,9 +248,11 @@ function NotizenApp() {
 function SettingsApp({
   orbState,
   setOrbState,
+  speech,
 }: {
   orbState: OrbState;
   setOrbState: (s: OrbState) => void;
+  speech: SpeechBridge;
 }) {
   return (
     <Shell>
@@ -270,8 +280,41 @@ function SettingsApp({
           </button>
         ))}
       </div>
+      <p className="mt-7 font-heading text-[13px] tracking-[0.16em] text-muted-foreground uppercase">
+        Stimme
+      </p>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          data-testid="settings-speech-toggle"
+          onClick={() => speech.setEnabled(!speech.enabled)}
+          disabled={!speech.supported}
+          className="flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-[11.5px] transition-colors duration-300 disabled:opacity-40"
+          style={{
+            borderColor: speech.enabled ? "rgba(34,211,238,0.45)" : "rgba(148,163,184,0.14)",
+            color: speech.enabled ? "#67e8f9" : "rgba(148,163,184,0.8)",
+          }}
+        >
+          {speech.enabled ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
+          {speech.enabled ? "Antworten vorlesen" : "Stumm"}
+        </button>
+        <button
+          type="button"
+          data-testid="settings-speech-test"
+          onClick={speech.test}
+          disabled={!speech.supported || !speech.enabled}
+          className="font-mono text-[11px] text-muted-foreground/70 transition-colors duration-200 hover:text-cyan-200 disabled:opacity-40"
+        >
+          Probe hören
+        </button>
+      </div>
+      {!speech.supported && (
+        <p className="mt-2 font-mono text-[10.5px] text-muted-foreground/60">
+          Dieser Browser kann nicht sprechen.
+        </p>
+      )}
       <div className="mt-6">
-        <Line label="Stimme" value="NOVA · ruhig" />
+        <Line label="Sprache" value="Deutsch · ruhig" />
         <Line label="Bewegungsintensität" value="dezent" />
         <Line label="Anonymer Modus" value="aktiv" />
         <Line label="Renderpfad" value="Canvas 2D · 60 fps" />
@@ -285,11 +328,13 @@ export default function AppContent({
   chat,
   orbState,
   setOrbState,
+  speech,
 }: {
   id: AppId;
   chat: ChatBridge;
   orbState: OrbState;
   setOrbState: (s: OrbState) => void;
+  speech: SpeechBridge;
 }) {
   switch (id) {
     case "chat":
@@ -305,7 +350,7 @@ export default function AppContent({
     case "notizen":
       return <NotizenApp />;
     case "einstellungen":
-      return <SettingsApp orbState={orbState} setOrbState={setOrbState} />;
+      return <SettingsApp orbState={orbState} setOrbState={setOrbState} speech={speech} />;
     default:
       return null;
   }

@@ -5,6 +5,12 @@ Ruhiges, fast schwarzes „KI-Betriebssystem“. Kein Login, keine echte KI (Moc
 ## Orb (Logo)
 Canvas-2D „Neuronen-Kugel“ in `src/components/nova/Orb.tsx`: 240 leicht zufällig gestreute Knoten auf einer Fibonacci-Kugel, per Nachbarschaft verbundene Synapsen plus längere Querfasern, 3D-rotiert und orthographisch projiziert. Hintere Hemisphäre → dunkler transluzenter Kern (occludiert) → vordere Hemisphäre → dünner Leuchtrand + Halo. Knoten/Kanten pulsieren phasenversetzt („atmendes Gehirn“), Farbe wird pro Zustand weich interpoliert, Rotation im Zustand `denken` schneller. NOVA-Schrift bleibt lesbar über dem dunklen Kern.
 
+## Sprachausgabe (TTS)
+`src/hooks/useSpeech.ts`: Web-Speech-Synthese (de-DE, rate 0.97). Jede Antwort wird vorgelesen; solange `speaking` true ist, zeigt der Orb den Zustand `antworten` mit synthetischer Sprech-Modulation (Radius/Ring pulsieren). Ein/Aus + „Probe hören" in Einstellungen → Stimme (`settings-speech-toggle`, `settings-speech-test`). Zuhören stoppt das Vorlesen, Esc ebenfalls; Orb-Menü zeigt „Vorlesen beenden" während gesprochen wird. Fehlende TTS-Engine wird abgefangen und blockiert nie den Befehlsfluss.
+
+## Aktivitäts-Impulse
+Im Orb wandern 18 Lichtimpulse mit Schweif entlang der Synapsen (nur sichtbare Hemisphäre). Intensität: `denken` 1.0 (doppelte Geschwindigkeit), `antworten` 0.7, `hoeren` 0.4, sonst 0.14.
+
 ## Sprachbefehl (Mikrofon)
 - Ein Klick auf den Orb startet/stoppt das Zuhören (`src/hooks/useVoice.ts`): Web Speech API (de-DE, interim results) für den Text + AnalyserNode-RMS für den Live-Pegel (in einem Ref, per `getLevel()` vom Orb pro Frame gelesen).
 - Orb-Zustand `hoeren` (Cyan-Weiß): Ring-Radius, Ringstärke und ein zweiter Ring reagieren live auf die Lautstärke.

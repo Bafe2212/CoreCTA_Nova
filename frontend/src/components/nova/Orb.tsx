@@ -28,7 +28,11 @@ interface Net {
   pts: Float32Array; // xyz per node on the unit sphere
   phase: Float32Array; // per-node pulse offset
   edges: Uint16Array; // flat pairs
+  pulseSpeed: Float32Array; // travelling impulses along the synapses
+  pulseOffset: Float32Array;
 }
+
+const PULSES = 18;
 
 /** Fibonacci sphere + nearest-neighbour synapses — built once, reused every frame. */
 function buildNet(): Net {
@@ -78,7 +82,13 @@ function buildNet(): Net {
       if (j !== i) edges.push(i, j);
     }
   }
-  return { pts, phase, edges: new Uint16Array(edges) };
+  const pulseSpeed = new Float32Array(PULSES);
+  const pulseOffset = new Float32Array(PULSES);
+  for (let p = 0; p < PULSES; p++) {
+    pulseSpeed[p] = 0.28 + Math.random() * 0.5;
+    pulseOffset[p] = Math.random() * 10;
+  }
+  return { pts, phase, edges: new Uint16Array(edges), pulseSpeed, pulseOffset };
 }
 
 /**
@@ -144,8 +154,15 @@ export default function Orb({
 
       const t = (now - start) / 1000;
       const rawLevel =
-        stateRef.current === "hoeren" ? Math.min(1, levelFnRef.current?.() ?? 0) : 0;
-      level = lerp(level, rawLevel, 0.22);
+        stateRef.current === "hoeren"
+          ? Math.min(1, levelFnRef.current?.() ?? 0)
+          : stateRef.current === "antworten"
+            ? // synthetic speech envelope: lively but calm, so the sphere "speaks"
+              0.24 +
+              0.2 * Math.sin(t * 7.1) * Math.sin(t * 2.6 + 1.1) +
+              0.16 * Math.sin(t * 4.3 + 0.6)
+            : 0;
+      level = lerp(level, Math.max(0, rawLevel), 0.22);
       const breath = Math.sin((t * Math.PI * 2) / speed);
       const cx = size / 2;
       const cy = size / 2;
@@ -238,6 +255,42 @@ export default function Orb({
       ctx.shadowBlur = glowPx * 4;
       ctx.shadowColor = rgba(primary, 0.7);
       drawShell(true);
+      ctx.restore();
+
+      // travelling activity impulses along the synapses — strongest while thinking
+      const st = stateRef.current;
+      const activity =
+        st === "denken" ? 1 : st === "antworten" ? 0.7 : st === "hoeren" ? 0.4 : 0.14;
+      const edgeCount = net.edges.length / 2;
+      ctx.save();
+      ctx.lineCap = "round";
+      for (let p = 0; p < PULSES; p++) {
+        const cyc = t * net.pulseSpeed[p] * (st === "denken" ? 2.1 : 1.2) + net.pulseOffset[p];
+        const cycle = Math.floor(cyc);
+        const prog = cyc - cycle;
+        const eIdx = (cycle * 13 + p * 29) % edgeCount;
+        const a = net.edges[eIdx * 2];
+        const b = net.edges[eIdx * 2 + 1];
+        if ((sz[a] + sz[b]) / 2 < 0) continue; // only on the visible hemisphere
+        const fade = Math.sin(prog * Math.PI) * activity;
+        if (fade <= 0.02) continue;
+        const px = lerp(sx[a], sx[b], prog);
+        const py = lerp(sy[a], sy[b], prog);
+        const tailProg = Math.max(0, prog - 0.35);
+        ctx.strokeStyle = rgba(secondary, 0.32 * fade);
+        ctx.lineWidth = Math.max(0.7, size * 0.0028);
+        ctx.beginPath();
+        ctx.moveTo(lerp(sx[a], sx[b], tailProg), lerp(sy[a], sy[b], tailProg));
+        ctx.lineTo(px, py);
+        ctx.stroke();
+        ctx.shadowBlur = size * 0.035;
+        ctx.shadowColor = rgba(secondary, 0.9);
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.7, size * 0.0055 * fade + size * 0.0016), 0, Math.PI * 2);
+        ctx.fillStyle = rgba(secondary, 0.5 + 0.45 * fade);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
       ctx.restore();
 
       // thin luminous rim
