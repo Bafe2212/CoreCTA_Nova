@@ -84,7 +84,7 @@ export default function Home() {
     [command],
   );
 
-  const voice = useVoice(send);
+  const voice = useVoice(send, { wakePaused: speech.speaking });
   const longPress = useRef(false);
   const pressTimer = useRef(0);
 
@@ -190,6 +190,14 @@ export default function Home() {
         >
           {ORB_LABELS[displayState]}
         </span>
+        {voice.wakeActive && (
+          <span
+            className="font-mono text-[10px] tracking-[0.22em] text-cyan-300/55 uppercase"
+            data-testid="wake-indicator"
+          >
+            · Hey NOVA
+          </span>
+        )}
       </div>
       <span className="pointer-events-none absolute top-6 right-7 font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground/45 uppercase">
         ⌘K
@@ -225,6 +233,16 @@ export default function Home() {
                   },
                   test: () =>
                     speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
+                }}
+                voice={{
+                  supported: voice.supported,
+                  wakeEnabled: voice.wakeEnabled,
+                  wakeActive: voice.wakeActive,
+                  setWakeEnabled: voice.setWakeEnabled,
+                }}
+                session={{
+                  openCount: wm.windows.length,
+                  reset: wm.resetSession,
                 }}
                 chat={{
                   history: history.data ?? [],
@@ -289,7 +307,7 @@ export default function Home() {
                   className="mt-7 font-mono text-[10px] tracking-[0.24em] text-muted-foreground/40 uppercase"
                   data-testid="nova-voice-hint"
                 >
-                  Orb antippen, um zu sprechen
+                  {voice.wakeEnabled ? "Sag „Hey NOVA“ oder tippe den Orb an" : "Orb antippen, um zu sprechen"}
                 </motion.p>
               )}
             </AnimatePresence>
@@ -368,7 +386,7 @@ export default function Home() {
         {menuOpen && (
           <motion.div
             className="absolute left-1/2 z-[260] w-[min(420px,88vw)] -translate-x-1/2 rounded-xl border border-white/[0.07] bg-[#050b13]/92 p-4 backdrop-blur-xl"
-            style={{ bottom: docked ? DOCK_HEIGHT + 24 : undefined, top: docked ? undefined : viewport.h * 0.42 + ORB_SIZE / 2 + 130 }}
+            style={{ bottom: docked ? DOCK_HEIGHT + 24 : undefined, top: docked ? undefined : viewport.h * 0.42 + ORB_SIZE / 2 + 175 }}
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -414,6 +432,15 @@ export default function Home() {
                   Vorlesen beenden
                 </button>
               )}
+              <button
+                type="button"
+                data-testid="orb-menu-wake"
+                onClick={() => voice.setWakeEnabled(!voice.wakeEnabled)}
+                className="font-mono text-[11px] transition-colors duration-200"
+                style={{ color: voice.wakeEnabled ? "#67e8f9" : "rgba(148,163,184,0.7)" }}
+              >
+                {voice.wakeEnabled ? "Weckwort aus" : "„Hey NOVA“ aktivieren"}
+              </button>
               <button
                 type="button"
                 data-testid="orb-menu-listen"                onClick={() => {

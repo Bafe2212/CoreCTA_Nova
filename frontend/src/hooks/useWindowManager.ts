@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { APP_MAP, type AppId } from "@/lib/nova";
+import { APP_MAP, isAppId, type AppId } from "@/lib/nova";
 
 export interface Rect {
   x: number;
@@ -21,6 +21,45 @@ export interface WinState {
 export const DOCK_HEIGHT = 150;
 const MIN_W = 320;
 const MIN_H = 220;
+const STORAGE_KEY = "nova.session.v1";
+
+const num = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
+
+/** Restore the last session's windows, clamped into the current viewport. */
+function loadSession(): WinState[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    return parsed.flatMap((entry): WinState[] => {
+      const e = entry as Partial<WinState> & { rect?: Partial<Rect> };
+      if (!isAppId(e.id ?? null)) return [];
+      const w = Math.min(Math.max(num(e.rect?.w, 600), MIN_W), Math.max(MIN_W, vw - 24));
+      const h = Math.min(Math.max(num(e.rect?.h, 460), MIN_H), Math.max(MIN_H, vh - 24));
+      return [
+        {
+          id: e.id as AppId,
+          rect: {
+            x: Math.min(Math.max(num(e.rect?.x, 40), 0), Math.max(0, vw - 120)),
+            y: Math.min(Math.max(num(e.rect?.y, 40), 8), Math.max(8, vh - 80)),
+            w,
+            h,
+          },
+          restore: null,
+          z: num(e.z, 10),
+          minimized: !!e.minimized,
+          maximized: false,
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
 
 export function useViewport() {
   const [size, setSize] = useState({
@@ -36,8 +75,29 @@ export function useViewport() {
 }
 
 export function useWindowManager(viewport: { w: number; h: number }) {
-  const [windows, setWindows] = useState<WinState[]>([]);
-  const [, setTopZ] = useState(10);
+  const [windows, setWindows] = useState<WinState[]>(loadSession);
+  const [, setTopZ] = useState(() =>
+    Math.max(10, ...loadSession().map((w) => w.z), 10) + 1,
+  );
+
+  // the session layout follows every change, so a reload brings NOVA back as it was
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(
+          windows.map((w) => ({
+            id: w.id,
+            rect: w.maximized && w.restore ? w.restore : w.rect,
+            z: w.z,
+            minimized: w.minimized,
+          })),
+        ),
+      );
+    } catch {
+      /* storage unavailable (private mode) — the session is simply not kept */
+    }
+  }, [windows]);
 
   const maxRect = useCallback(
     (): Rect => ({ x: 24, y: 24, w: viewport.w - 48, h: viewport.h - DOCK_HEIGHT - 24 }),
@@ -117,6 +177,15 @@ export function useWindowManager(viewport: { w: number; h: number }) {
 
   const closeAll = useCallback(() => setWindows([]), []);
 
+  const resetSession = useCallback(() => {
+    setWindows([]);
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* nothing to clear */
+    }
+  }, []);
+
   const activeId = useMemo(() => {
     const visible = windows.filter((w) => !w.minimized);
     if (!visible.length) return null;
@@ -129,6 +198,7 @@ export function useWindowManager(viewport: { w: number; h: number }) {
     open,
     close,
     closeAll,
+    resetSession,
     focus,
     minimize,
     toggleMaximize,

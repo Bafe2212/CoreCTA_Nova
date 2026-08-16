@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { Ear, EarOff, Search, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,18 @@ export interface SpeechBridge {
   speaking: boolean;
   setEnabled: (v: boolean) => void;
   test: () => void;
+}
+
+export interface VoiceBridge {
+  supported: boolean;
+  wakeEnabled: boolean;
+  wakeActive: boolean;
+  setWakeEnabled: (v: boolean) => void;
+}
+
+export interface SessionBridge {
+  openCount: number;
+  reset: () => void;
 }
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -249,10 +261,14 @@ function SettingsApp({
   orbState,
   setOrbState,
   speech,
+  voice,
+  session,
 }: {
   orbState: OrbState;
   setOrbState: (s: OrbState) => void;
   speech: SpeechBridge;
+  voice: VoiceBridge;
+  session: SessionBridge;
 }) {
   return (
     <Shell>
@@ -313,6 +329,55 @@ function SettingsApp({
           Dieser Browser kann nicht sprechen.
         </p>
       )}
+      <p className="mt-7 font-heading text-[13px] tracking-[0.16em] text-muted-foreground uppercase">
+        Weckwort
+      </p>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          data-testid="settings-wake-toggle"
+          onClick={() => voice.setWakeEnabled(!voice.wakeEnabled)}
+          disabled={!voice.supported}
+          className="flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-[11.5px] transition-colors duration-300 disabled:opacity-40"
+          style={{
+            borderColor: voice.wakeEnabled ? "rgba(34,211,238,0.45)" : "rgba(148,163,184,0.14)",
+            color: voice.wakeEnabled ? "#67e8f9" : "rgba(148,163,184,0.8)",
+          }}
+        >
+          {voice.wakeEnabled ? <Ear className="size-3.5" /> : <EarOff className="size-3.5" />}
+          {voice.wakeEnabled ? "„Hey NOVA“ aktiv" : "Weckwort aus"}
+        </button>
+        <span className="font-mono text-[10.5px] text-muted-foreground/60">
+          {voice.wakeEnabled
+            ? voice.wakeActive
+              ? "wartet im Hintergrund"
+              : "kurz unterbrochen"
+            : "Orb antippen genügt"}
+        </span>
+      </div>
+      {!voice.supported && (
+        <p className="mt-2 font-mono text-[10.5px] text-muted-foreground/60">
+          Dieser Browser kann nicht zuhören.
+        </p>
+      )}
+
+      <p className="mt-7 font-heading text-[13px] tracking-[0.16em] text-muted-foreground uppercase">
+        Sitzung
+      </p>
+      <div className="mt-3 flex items-center gap-3">
+        <span className="font-mono text-[11px] text-muted-foreground/70">
+          {session.openCount} Fenster werden beim nächsten Start wiederhergestellt
+        </span>
+        <button
+          type="button"
+          data-testid="settings-session-reset"
+          onClick={session.reset}
+          className="font-mono text-[11px] text-muted-foreground/70 transition-colors duration-200 hover:text-cyan-200"
+        >
+          Layout zurücksetzen
+        </button>
+      </div>
+
       <div className="mt-6">
         <Line label="Sprache" value="Deutsch · ruhig" />
         <Line label="Bewegungsintensität" value="dezent" />
@@ -329,12 +394,16 @@ export default function AppContent({
   orbState,
   setOrbState,
   speech,
+  voice,
+  session,
 }: {
   id: AppId;
   chat: ChatBridge;
   orbState: OrbState;
   setOrbState: (s: OrbState) => void;
   speech: SpeechBridge;
+  voice: VoiceBridge;
+  session: SessionBridge;
 }) {
   switch (id) {
     case "chat":
@@ -350,7 +419,15 @@ export default function AppContent({
     case "notizen":
       return <NotizenApp />;
     case "einstellungen":
-      return <SettingsApp orbState={orbState} setOrbState={setOrbState} speech={speech} />;
+      return (
+        <SettingsApp
+          orbState={orbState}
+          setOrbState={setOrbState}
+          speech={speech}
+          voice={voice}
+          session={session}
+        />
+      );
     default:
       return null;
   }

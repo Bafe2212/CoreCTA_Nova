@@ -5,6 +5,12 @@ Ruhiges, fast schwarzes „KI-Betriebssystem“. Kein Login, keine echte KI (Moc
 ## Orb (Logo)
 Canvas-2D „Neuronen-Kugel“ in `src/components/nova/Orb.tsx`: 240 leicht zufällig gestreute Knoten auf einer Fibonacci-Kugel, per Nachbarschaft verbundene Synapsen plus längere Querfasern, 3D-rotiert und orthographisch projiziert. Hintere Hemisphäre → dunkler transluzenter Kern (occludiert) → vordere Hemisphäre → dünner Leuchtrand + Halo. Knoten/Kanten pulsieren phasenversetzt („atmendes Gehirn“), Farbe wird pro Zustand weich interpoliert, Rotation im Zustand `denken` schneller. NOVA-Schrift bleibt lesbar über dem dunklen Kern.
 
+## Weckwort „Hey NOVA“
+`useVoice` hat zwei Modi: `wake` (continuous, erkennt /(hey|hallo|ok|okay)[ ,!.]*nova/i im Hintergrund) und `command` (aktives Zuhören mit Pegel + Transkript). Weckwort erkannt → automatisch Kommando-Modus; nach dem Befehl kehrt es in den Wartemodus zurück. Während NOVA spricht, wird der Wake-Listener pausiert (`wakePaused`), damit sie sich nicht selbst hört. Ein/Aus: Einstellungen → Weckwort (`settings-wake-toggle`) oder Orb-Menü (`orb-menu-wake`); armiert erscheint oben links „· Hey NOVA“ (`wake-indicator`). Abgelehnter Mikrofonzugriff schaltet das Weckwort automatisch ab.
+
+## Sitzungs-Layouts
+`useWindowManager` lädt/speichert die offenen Fenster (id, rect, z, minimized) in `localStorage["nova.session.v1"]` — jede Änderung wird gespeichert, beim Start werden die Fenster auf den aktuellen Viewport geklemmt wiederhergestellt (Orb startet dann direkt im Dock). Maximierte Fenster werden mit ihrem Restore-Rect gesichert. Zurücksetzen: Einstellungen → Sitzung → „Layout zurücksetzen“ (`settings-session-reset`).
+
 ## Sprachausgabe (TTS)
 `src/hooks/useSpeech.ts`: Web-Speech-Synthese (de-DE, rate 0.97). Jede Antwort wird vorgelesen; solange `speaking` true ist, zeigt der Orb den Zustand `antworten` mit synthetischer Sprech-Modulation (Radius/Ring pulsieren). Ein/Aus + „Probe hören" in Einstellungen → Stimme (`settings-speech-toggle`, `settings-speech-test`). Zuhören stoppt das Vorlesen, Esc ebenfalls; Orb-Menü zeigt „Vorlesen beenden" während gesprochen wird. Fehlende TTS-Engine wird abgefangen und blockiert nie den Befehlsfluss.
 
