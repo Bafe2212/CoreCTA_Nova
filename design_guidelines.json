@@ -1,0 +1,243 @@
+{
+  "colors": {
+    "surfaces": [
+      {
+        "name": "desktop",
+        "kind": "solid",
+        "bg": "#03070d",
+        "on_bg": "#f0f6fc",
+        "on_bg_muted": "#8b949e",
+        "roles": {
+          "link": "#38bdf8",
+          "error": "#f87171",
+          "success": "#4ade80",
+          "accent_cyan": "#06b6d4",
+          "accent_violet": "#a855f7"
+        }
+      },
+      {
+        "name": "window_surface",
+        "kind": "glass",
+        "contrast_against": "#080e1a",
+        "guarantee": "backdrop-blur-2xl bg-slate-950/80 border border-slate-800/60 shadow-2xl shadow-cyan-950/20",
+        "on_bg": "#f8fafc",
+        "on_bg_muted": "#94a3b8",
+        "roles": {
+          "link": "#38bdf8",
+          "error": "#ef4444",
+          "success": "#22c55e",
+          "warning": "#eab308"
+        }
+      },
+      {
+        "name": "input_panel",
+        "kind": "glass",
+        "contrast_against": "#050a12",
+        "guarantee": "backdrop-blur-md bg-slate-900/60 border border-slate-700/50 focus-within:border-cyan-500/80",
+        "on_bg": "#f1f5f9",
+        "on_bg_muted": "#64748b"
+      },
+      {
+        "name": "command_palette",
+        "kind": "glass",
+        "contrast_against": "#020617",
+        "guarantee": "backdrop-blur-2xl bg-slate-950/90 border border-cyan-500/30 shadow-[0_0_50px_rgba(6,182,212,0.15)]",
+        "on_bg": "#f8fafc",
+        "on_bg_muted": "#94a3b8"
+      },
+      {
+        "name": "badge_cyan",
+        "kind": "solid",
+        "bg": "#0e3a47",
+        "on_bg": "#e0f2fe",
+        "on_bg_muted": "#7dd3fc"
+      },
+      {
+        "name": "badge_violet",
+        "kind": "solid",
+        "bg": "#3b0764",
+        "on_bg": "#f3e8ff",
+        "on_bg_muted": "#c084fc"
+      }
+    ],
+    "accent": "#06b6d4",
+    "on_accent": "#03070d",
+    "orb_states": {
+      "idle": {
+        "primary": "#06b6d4",
+        "secondary": "#3b82f6",
+        "glow": "rgba(6, 182, 212, 0.4)",
+        "description_de": "Cyan/Blau - Langsames ruhiges Pulsieren"
+      },
+      "denken": {
+        "primary": "#8b5cf6",
+        "secondary": "#3b82f6",
+        "glow": "rgba(139, 92, 246, 0.5)",
+        "description_de": "Violett/Blau - Schnelleres Pulsieren mit subtil rotierender Lichtstruktur"
+      },
+      "antworten": {
+        "primary": "#f8fafc",
+        "secondary": "#06b6d4",
+        "glow": "rgba(248, 250, 252, 0.6)",
+        "description_de": "Weiß/Cyan - Dynamische feine Lichtwellen"
+      },
+      "erfolg": {
+        "primary": "#22c55e",
+        "secondary": "#10b981",
+        "glow": "rgba(34, 197, 94, 0.5)",
+        "description_de": "Grün - Kurzer, weicher Glow-Impuls"
+      },
+      "warnung": {
+        "primary": "#f59e0b",
+        "secondary": "#eab308",
+        "glow": "rgba(245, 158, 11, 0.5)",
+        "description_de": "Orange/Gelb - Sanft flackernder Indikator"
+      },
+      "fehler": {
+        "primary": "#ef4444",
+        "secondary": "#dc2626",
+        "glow": "rgba(239, 68, 68, 0.5)",
+        "description_de": "Rot - Minimalistischer ruhiger Farbwechsel"
+      }
+    }
+  },
+  "typography": {
+    "heading_font": "Sora Variable",
+    "body_font": "Geist Variable",
+    "mono_font": "Geist Mono Variable",
+    "imports": [
+      "@fontsource-variable/sora",
+      "@fontsource-variable/geist",
+      "@fontsource-variable/geist-mono"
+    ],
+    "scale_px": {
+      "display": 56,
+      "h1": 40,
+      "h2": 28,
+      "h3": 20,
+      "body": 15,
+      "caption": 13
+    }
+  },
+  "entry_surfaces": {
+    "/": "Startscreen: Extrem reduzierter nahezu schwarzer Canvas mit zentralem pulsierendem 3D/HTML5 Canvas NOVA Orb, dezentem 'Wie kann ich dir helfen?' Prompt und minimalistischem Input-Feld. Bei Aktion/Befehl wandert Orb nach unten ins Dock und öffnet sanft z-indexed Desktop-Fenster."
+  },
+  "visual_enhancers": {
+    "background": "Deep Void (#03070d) with subtle animated star/energy particles canvas overlay at 15% opacity",
+    "window_glass": "Minimalist ultra-thin borders (border-slate-800/60), subtle backdrop blur (16px), drop shadow (shadow-2xl shadow-cyan-950/20)",
+    "orb_canvas": "Custom WebGL/HTML5 2D Canvas ambient light sphere with multi-layer glowing rings, noise distortion shader / smooth sine breathing",
+    "grid_alignment": "Asymmetric floating window desktop layout with z-index elevation on click, snap guidelines when dragging"
+  },
+  "component_name": "NOVA_AI_OS_Prototype",
+  "grids": {
+    "desktop_viewport": "w-screen h-screen overflow-hidden bg-[#03070d] relative select-none font-sans text-slate-100",
+    "window_stacking": "Absolute positioned window frames with dynamic z-index management and bounding box drag/resize constraints"
+  },
+  "layouts": {
+    "initial_state": "Zentraler Orb (220px Durchmesser), mittiger dezent leuchtender Typo-Prompt 'Wie kann ich dir helfen?', hover-empfindliches Command Input Bar",
+    "active_os_state": "Orb verkleinert sich fließend auf 52px und schwebt im unteren NOVA-Dock. Fenster öffnen sich sanft aus der Mitte. Dock bietet Orb-Statusanzeige, Schnellauswahl der 7 Fenster-Apps und Status-Umschalter"
+  },
+  "windows": [
+    {
+      "id": "chat",
+      "title_de": "NOVA Chat",
+      "icon": "MessageSquare",
+      "description_de": "Konversation mit NOVA AI - Fließende Dialoge, Code-Erzeugung und Systemsteuerung",
+      "default_size": { "w": 680, "h": 520 },
+      "default_position": { "x": 120, "y": 80 }
+    },
+    {
+      "id": "browser",
+      "title_de": "Quanten-Browser",
+      "icon": "Globe",
+      "description_de": "KI-gestütztes Web-Browsing mit Quellensynthese und Lesezeichen",
+      "default_size": { "w": 780, "h": 560 },
+      "default_position": { "x": 240, "y": 100 }
+    },
+    {
+      "id": "files",
+      "title_de": "Dateien & Speicher",
+      "icon": "Folder",
+      "description_de": "Virtuelles Dateisystem mit KI-Indizierung, Tags und Dokumentenvorschau",
+      "default_size": { "w": 700, "h": 480 },
+      "default_position": { "x": 180, "y": 140 }
+    },
+    {
+      "id": "memory",
+      "title_de": "Langzeitgedächtnis",
+      "icon": "Brain",
+      "description_de": "Semantischer Vektor-Speicher von NOVA mit Erlebnissen, Präferenzen & Fakten",
+      "default_size": { "w": 640, "h": 500 },
+      "default_position": { "x": 300, "y": 90 }
+    },
+    {
+      "id": "schule",
+      "title_de": "Lernen & Schule",
+      "icon": "GraduationCap",
+      "description_de": "Interaktive Lernassistenten, Übungsaufgaben, Formelprüfer & Zusammenfassungen",
+      "default_size": { "w": 720, "h": 540 },
+      "default_position": { "x": 220, "y": 120 }
+    },
+    {
+      "id": "notizen",
+      "title_de": "Gedanken & Notizen",
+      "icon": "FileText",
+      "description_de": "Minimalistischer Editor mit Markdown-Support, KI-Vervollständigung & Tags",
+      "default_size": { "w": 600, "h": 460 },
+      "default_position": { "x": 340, "y": 160 }
+    },
+    {
+      "id": "einstellungen",
+      "title_de": "System-Einstellungen",
+      "icon": "Sliders",
+      "description_de": "Anpassung von NOVA Voice, Orb-Farbfrequenzen, Anonymität & Performance",
+      "default_size": { "w": 580, "h": 480 },
+      "default_position": { "x": 280, "y": 180 }
+    }
+  ],
+  "motion": {
+    "orb_breathing": "Continuous slow CSS/Canvas sine pulsation (duration 4s ease-in-out infinite)",
+    "orb_transition": "Framer Motion layout transition (spring: { stiffness: 220, damping: 24 }) moving orb from center to dock",
+    "window_open": "Scale 0.92 to 1.0, opacity 0 to 1 with cubic-bezier(0.16, 1, 0.3, 1) over 320ms",
+    "command_palette": "Fade and scale drop from top (y: -12 to 0, opacity 0 to 1 in 180ms)"
+  },
+  "accessibility": {
+    "aria_labels_de": "Barrierefreie Beschriftungen für Orb-Zustände, Fenster-Aktionen (Minimieren, Maximieren, Schließen) und Tastaturnavigation (⌘K)",
+    "data_testid_policy": "Alle Buttons, Input-Felder, Orb-Interaktionen und Fenster-Header tragen eindeutige data-testid Attribute (kebab-case)",
+    "keyboard_nav": "Full support for Tab navigation, Esc to close top window/palette, ⌘K / Ctrl+K to toggle Command Palette"
+  },
+  "media": {
+    "icons_library": "lucide-react",
+    "canvas_effects": "Procedural HTML5 2D glowing canvas with smooth radial gradients, particle drift and frequency modulation"
+  },
+  "3d libraries": {
+    "implementation": "HTML5 Canvas 2D glow sphere rendering with smooth trigonometric wave functions & dynamic gradient interpolation for maximum performance and 60FPS fluidity"
+  },
+  "image_urls": [
+    {
+      "category": "abstract_background",
+      "url": "https://images.unsplash.com/photo-1579567761406-4684ee0c75b6?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "usage": "Subtle dark wallpaper background option in Browser or Settings window"
+    },
+    {
+      "category": "avatar_profile",
+      "url": "https://images.unsplash.com/photo-1765213186469-727cd0f08c23?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "usage": "Minimalist avatar accent in Memory & Settings"
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Erstelle eine nahtlose, extrem ruhige und futuristische NOVA OS Oberfläche auf Deutsch.",
+    "Implementiere den zentralen Orb mit sanften Canvas-Glow-Effekten und allen 6 Zuständen (Idle, Denken, Antworten, Erfolg, Warnung, Fehler).",
+    "Integriere das vollfunktionsfähige Multi-Fenster-System (Verschieben per Drag, Skalieren/Resize, Minimieren, Maximieren, Schließen, Z-Index-Reihenfolge).",
+    "Stelle sicher, dass alle 7 Fenster (Chat, Browser, Dateien, Memory, Schule, Notizen, Einstellungen) reichhaltige, interaktive Mock-Inhalte besitzen.",
+    "Biete ein interaktives Command-Palette-Overlay (⌘K / Ctrl+K) für schnellen Fensteraufruf und KI-Befehle.",
+    "Setze ein Klick-Menü beim Orb um, das eine manuelle Zustandssteuerung und Systemdiagnose ermöglicht.",
+    "Verwende ausnahmslos data-testid Attribute an allen interaktiven Elementen für spätere E2E-Tests."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "design_tone": "Ruhiges, futuristisches KI-Betriebssystem. Keine knalligen Gradients, sondern tiefe Dunkelheit mit präzisen Cyan/Violett-Lichtquellen.",
+    "typography_rule": "Sora Variable für prägnante Headlines/Labels, Geist Variable für flüssigen Fließtext, Geist Mono für Systemwerte & Code.",
+    "contrast_guarantee": "Text immer mindestens 4.5:1 Kontrast gegen den dunklen Hintergrund (#03070d). Muted Text mit Slate-400 (#94a3b8) für optimale Lesbarkeit.",
+    "spacing_philosophy": "Großzügiger Negativraum. Keine überladenen Dashboards oder sperrige Sidebars."
+  }
+}
