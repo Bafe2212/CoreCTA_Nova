@@ -324,6 +324,7 @@ export function useVoice(
 
   return {
     supported,
+    blocked: false,
     listening,
     wakeEnabled,
     wakeActive,

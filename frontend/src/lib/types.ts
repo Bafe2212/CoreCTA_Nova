@@ -55,3 +55,16 @@ export interface SchoolTask {
   done: boolean;
   created_at: string;
 }
+
+export interface TtsVoice {
+  id: string;
+  name: string;
+  preview_url: string | null;
+}
+
+export interface TtsStatus {
+  configured: boolean;
+  provider: "elevenlabs" | "browser";
+  default_voice_id: string | null;
+  voices: TtsVoice[];
+}

@@ -2,27 +2,12 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { visualEdits } from "@emergentbase/visual-edits/vite";
-
-// Supervisor exports DISABLE_HOT_RELOAD=true when the platform sets ENABLE_RELOAD=false.
-const hotReloadDisabled = process.env.DISABLE_HOT_RELOAD === "true";
-
-// Visual Edits (x-* JSX tagging, overlay, /edit-file endpoint) is dev-server-only by
-// default (apply: serve); escape hatch mirrors DISABLE_HOT_RELOAD.
-const visualEditsDisabled = process.env.DISABLE_VISUAL_EDITS === "true";
-
-// Pod inotify quota is node-shared and routinely exhausted; native fs.watch EMFILEs at
-// boot. Polling is the load-bearing default (set before Vite evaluates the config).
-if (!hotReloadDisabled) {
-  process.env.CHOKIDAR_USEPOLLING = "true";
-}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    ...(visualEditsDisabled ? [] : [visualEdits()]),
   ],
   resolve: {
     alias: {
@@ -63,13 +48,8 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
-    allowedHosts: true,
-    // No hmr.clientPort override: Vite infers the WS target from window.location, which
-    // is correct on both localhost:3000 (smoke) and the https/:443 preview proxy.
-    hmr: !hotReloadDisabled,
-    watch: hotReloadDisabled ? null : { usePolling: true, interval: 300 },
     // The /api proxy convention: frontend code calls relative /api/*, never an
-    // absolute backend URL. Target is the FastAPI dev server (supervisor: backend).
+    // absolute backend URL. Target is the FastAPI dev server.
     proxy: {
       "/api": {
         target: "http://localhost:8001",

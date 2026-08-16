@@ -21,6 +21,7 @@ import {
 import { DOCK_HEIGHT, useViewport, useWindowManager } from "@/hooks/useWindowManager";
 import { useVoice } from "@/hooks/useVoice";
 import { useSpeech } from "@/hooks/useSpeech";
+import { useChatStream } from "@/hooks/useChatStream";
 import { useProviders } from "@/hooks/useNovaData";
 
 const ORB_SIZE = 340;
@@ -46,7 +47,6 @@ export default function Home() {
   const lastActivity = useRef(Date.now());
   const standbyRef = useRef<() => void>(() => undefined);
   const timers = useRef<number[]>([]);
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
   const docked = wm.windows.length > 0;
 
@@ -101,6 +101,29 @@ export default function Home() {
     if (model) window.localStorage.setItem("nova.model", model);
   }, [provider, model]);
 
+  // zentraler Chat-Stream: NOVA kann antworten + vorlesen, ohne dass das
+  // Chat-Fenster offen ist. Der Verlauf wird trotzdem in der DB gespeichert
+  // und erscheint, sobald man das Fenster öffnet.
+  const chatStream = useChatStream({
+    provider,
+    model,
+    onStart: () => {
+      setNotice(null);
+      setOrbState("denken");
+    },
+    onFirstDelta: () => setOrbState("antworten"),
+    onDone: (text) => {
+      setOrbState("erfolg");
+      later(() => setOrbState("idle"), 1600);
+      speech.speak(text);
+    },
+    onError: (message) => {
+      setOrbState("fehler");
+      setNotice(message);
+      later(() => setOrbState("idle"), 3200);
+    },
+  });
+
   const command = useMutation({
     mutationFn: (text: string) => apiPost<CommandResult>("/nova/command", { prompt: text }),
     onMutate: () => {
@@ -109,12 +132,14 @@ export default function Home() {
     },
     onSuccess: (result, prompt) => {
       const target: AppId = isAppId(result.open_window) ? result.open_window : "chat";
-      later(() => wm.open(target), 260);
       if (target === "chat") {
-        // a real question — hand it to the chat window, which streams the answer
-        setPendingPrompt(prompt);
+        // Eine echte Frage — NOVA antwortet im Hintergrund und liest vor.
+        // Das Chat-Fenster bleibt zu; der Verlauf wird trotzdem gespeichert
+        // und erscheint, sobald man das Fenster öffnet.
+        chatStream.send(prompt);
         return;
       }
+      later(() => wm.open(target), 260);
       setOrbState("antworten");
       setNotice(result.reply);
       later(() => setOrbState("erfolg"), 1500);
@@ -195,11 +220,12 @@ export default function Home() {
   const toStandby = useCallback(() => {
     voice.stop();
     speech.stop();
+    chatStream.stop();
     wm.closeAll();
     setMenuOpen(false);
     setNotice(null);
     setPhase("standby");
-  }, [speech, voice, wm]);
+  }, [speech, voice, chatStream, wm]);
 
   standbyRef.current = toStandby;
 
@@ -384,6 +410,9 @@ export default function Home() {
                   supported: speech.supported,
                   enabled: speechEnabled,
                   speaking: speech.speaking,
+                  elevenlabs: speech.elevenlabs,
+                  voiceId: speech.voiceId,
+                  setVoiceId: speech.setVoiceId,
                   setEnabled: (v: boolean) => {
                     setSpeechEnabled(v);
                     if (!v) speech.stop();
@@ -404,23 +433,12 @@ export default function Home() {
                 chat={{
                   provider,
                   model,
-                  pendingPrompt,
-                  consumePending: () => setPendingPrompt(null),
-                  onStart: () => {
-                    setNotice(null);
-                    setOrbState("denken");
-                  },
-                  onFirstDelta: () => setOrbState("antworten"),
-                  onDone: (text) => {
-                    setOrbState("erfolg");
-                    later(() => setOrbState("idle"), 1600);
-                    speech.speak(text);
-                  },
-                  onError: (message) => {
-                    setOrbState("fehler");
-                    setNotice(message);
-                    later(() => setOrbState("idle"), 3200);
-                  },
+                  streaming: chatStream.streaming,
+                  pending: chatStream.pending,
+                  partial: chatStream.partial,
+                  error: chatStream.error,
+                  send: chatStream.send,
+                  stop: chatStream.stop,
                 }}
               />
             </NovaWindow>

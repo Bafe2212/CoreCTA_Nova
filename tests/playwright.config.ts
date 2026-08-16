@@ -12,7 +12,7 @@ export default defineConfig({
     ['json', { outputFile: './test-results/results.json' }],
   ],
   use: {
-    // farm-ts: localhost — Vite proxies /api to FastAPI; the external preview host is not in-pod routable.
+    // localhost — Vite (dev) bzw. nginx (prod) proxies /api to FastAPI.
     baseURL: 'http://localhost:3000',
     screenshot: 'on',
     trace: 'on-first-retry',
@@ -21,7 +21,6 @@ export default defineConfig({
   },
   projects: [
     // Keep the project matching the brief's form factor; DELETE the other (both = 2x test time).
-    // Only chromium is installed — never switch to iPhone/webkit device descriptors.
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },

@@ -7,6 +7,7 @@ import type {
   Note,
   ProviderStatus,
   SchoolTask,
+  TtsStatus,
 } from "@/lib/types";
 
 /** Every NOVA surface reads and writes through TanStack Query. */
@@ -17,6 +18,7 @@ export const notesKey = ["notes"] as const;
 export const memoryKey = ["memory"] as const;
 export const filesKey = ["files"] as const;
 export const tasksKey = ["tasks"] as const;
+export const ttsKey = ["tts", "status"] as const;
 
 export const useProviders = () =>
   useQuery({
@@ -140,3 +142,12 @@ export const useDeleteTask = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: tasksKey }),
   });
 };
+
+// ---------- TTS (ElevenLabs) ----------
+
+export const useTtsStatus = () =>
+  useQuery({
+    queryKey: ttsKey,
+    queryFn: () => apiGet<TtsStatus>("/tts/status"),
+    staleTime: 5 * 60 * 1000,
+  });

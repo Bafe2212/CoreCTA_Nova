@@ -1,8 +1,8 @@
 """Pre-scaffolded pytest fixtures for the FastAPI backend.
 
-Tests hit the live uvicorn process managed by supervisor (not an in-process ASGI app), so
-the app under test is the same one the frontend and Playwright see. Do NOT re-create this
-file — add app-specific fixtures below the marker at the bottom.
+Tests hit the live uvicorn process (not an in-process ASGI app), so the app
+under test is the same one the frontend and Playwright see. Do NOT re-create
+this file — add app-specific fixtures below the marker at the bottom.
 """
 
 import os

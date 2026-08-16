@@ -1,195 +1,140 @@
-# farm-ts
+# NOVA — persönlicher KI-Assistent
 
-Minimal split backend/frontend starter: **FastAPI + MongoDB** behind a
-**Vite + React 19 + TypeScript** frontend, joined by a small typed fetch layer
-over `/api`. This is a bare skeleton — no app features are implemented. Build on
-top of it.
+Ruhiges, fast schwarzes „KI-Betriebssystem": zentraler Licht-Orb, minimalistische
+Fenster, sehr viel Stille. Kein Login. Echte KI über die eigenen Keys des Nutzers
+(GPT / Gemini / GLM), Daten persistent in MongoDB.
+
+**Stack:** FastAPI + MongoDB (motor) · Vite + React 19 + TypeScript strict ·
+Tailwind v4 + shadcn/ui (auf `@base-ui/react`).
 
 ## Layout
 
 ```
-farm-ts/
-  backend/   FastAPI + motor (async MongoDB) + Pydantic v2 — python, /root/.venv
+CoreCTA_Nova/
+  backend/   FastAPI + motor (async MongoDB) + Pydantic v2 — Python, /api
   frontend/  Vite + React 19 + Tailwind v4 + shadcn/ui (TypeScript strict)
-  tests/     Playwright e2e workspace (pre-scaffolded)
+  tests/     Playwright e2e
+  memory/    Spezifikation & Notizen
 ```
 
-## Running
+## Schnellstart (Docker Compose — empfohlen für Self-Host)
 
-Two separate processes, managed by supervisor in the pod (see "Pod conventions"
-below); to run them by hand from two terminals instead:
+Voraussetzung: Docker + Docker Compose v2.
+
+1. **Backend-Env einrichten** — `backend/.env` enthält bereits Defaults für
+   lokales MongoDB. Trage deine API-Keys ein (mindestens einen Provider):
+
+   ```bash
+   # backend/.env
+   OPENAI_API_KEY=sk-...
+   # GEMINI_API_KEY=...
+   # ZHIPUAI_API_KEY=...
+   NOVA_DEFAULT_PROVIDER=openai
+   # Optional: ElevenLabs für natürliche Sprachausgabe
+   # ELEVENLABS_API_KEY=...
+   # ELEVENLABS_VOICE_ID=...
+   ```
+
+2. **Starten:**
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+   Das bringt drei Container hoch:
+   - `nova-mongo` — MongoDB (Daten in einem Volume)
+   - `nova-backend` — FastAPI auf Port `8001`
+   - `nova-frontend` — nginx, der den Vite-Production-Build ausliefert und
+     `/api/*` an das Backend proxyt, auf Port `3000` (bzw. `80` im Container)
+
+3. **Öffnen:** <http://localhost:3000>
+
+4. **Logs / Stop:**
+
+   ```bash
+   docker compose logs -f backend
+   docker compose down            # stoppen, Daten bleiben erhalten
+   docker compose down -v         # stoppen + MongoDB-Daten löschen
+   ```
+
+> **Hinweis zur Produktion:** Stelle NOVA hinter einen Reverse Proxy
+> (nginx/Traefik/Caddy) mit TLS. Setze `CORS_ORIGINS` in `backend/.env` auf
+> deine echte Domain statt `*`, und `APP_URL` auf die öffentliche URL.
+
+## Lokale Entwicklung (ohne Docker)
+
+Drei Prozesse in separaten Terminals:
 
 ```bash
-cd backend && uvicorn server:app --host 0.0.0.0 --port 8001 --reload   # http://localhost:8001
-cd frontend && yarn dev                                                # http://localhost:3000
+# 1. MongoDB (lokal installiert oder z. B. via Docker)
+docker run -d --name nova-mongo -p 27017:27017 mongo:8
+
+# 2. Backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate          # Windows PowerShell
+# source .venv/bin/activate     # macOS/Linux
+pip install -r requirements.txt
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload   # http://localhost:8001
+
+# 3. Frontend
+cd frontend
+npm install
+npm run dev                                                    # http://localhost:3000
 ```
 
-## The `/api` proxy convention
+## Die `/api`-Proxy-Konvention
 
-Every backend route lives under `/api` (the backend mounts one
-`APIRouter(prefix="/api")`), and the frontend dev server
-(`frontend/vite.config.ts`) proxies `/api/*` to `http://localhost:8001`. So
-frontend code always calls a **relative** path — `apiGet("/status")` →
-`/api/status` — and never an absolute backend URL. The same code works in dev
-(via the Vite proxy) and in production (once both are served behind a single
-origin).
+Jede Backend-Route liegt unter `/api` (ein `APIRouter(prefix="/api")`), und der
+Vite-Dev-Server (`frontend/vite.config.ts`) proxyt `/api/*` nach
+`http://localhost:8001`. Im Frontend also immer **relative** Pfade aufrufen —
+`apiGet("/status")` → `/api/status`. In Produktion übernimmt der nginx-Container
+dieselbe Proxy-Rolle, sodass der Frontend-Code unverändert bleibt.
 
-## Backend
+## Konfiguration (`backend/.env`)
 
-FastAPI, async throughout. `python` is the app venv interpreter
-(`/root/.venv/bin/python`); backend deps are pip-installed from
-`backend/requirements.txt`.
+| Variable | Bedeutung |
+|---|---|
+| `MONGO_URL` | MongoDB-Connection-String (Default: `mongodb://localhost:27017`) |
+| `DB_NAME` | MongoDB-Datenbankname (Default: `nova`) |
+| `CORS_ORIGINS` | Kommaseparierte Origins oder `*` (Default: `*`) |
+| `APP_URL` | Öffentliche URL der App |
+| `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ZHIPUAI_API_KEY` | LLM-Provider-Keys (mindestens einer) |
+| `NOVA_DEFAULT_PROVIDER` | `openai` \| `gemini` \| `zhipu` (Default: `openai`) |
+| `ZHIPU_BASE_URL` | Z.AI-Endpoint (Default: `https://api.z.ai/api/paas/v4/`) |
+| `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | Optional, für natürliche TTS (sonst Browser-Fallback) |
 
-- **Entry point**: `backend/server.py` — creates `app = FastAPI()`, creates
-  `api_router = APIRouter(prefix="/api")`, registers routes **on the router**,
-  and calls `app.include_router(api_router)` at the bottom. CORS middleware is
-  added from `CORS_ORIGINS`. Never hang a route directly off `app` — it would
-  land outside `/api` and the Vite proxy would not reach it.
-- **The route pattern** (copy `status` in `server.py`):
-  1. a Pydantic model per request body and per response
-     (`StatusCheckCreate` / `StatusCheck`);
-  2. an `async def` handler decorated with
-     `@api_router.post("/status", response_model=StatusCheck)`;
-  3. `await` the motor call inside it.
-  FastAPI validates the request against the Pydantic model before your handler
-  runs — a malformed body never reaches your code, it gets an automatic `422`
-  with a `{"detail": [...]}` body.
-- **Growing the backend**: as `server.py` gets crowded, move models to
-  `backend/models/` and routers to `backend/routers/` (one module per resource,
-  each exporting its own `APIRouter`, mounted from `server.py` via
-  `api_router.include_router(...)` or `app.include_router(...)` with the `/api`
-  prefix preserved).
-- **MongoDB**: import the shared handle — `from lib.db import client, db`
-  (`backend/lib/db.py` self-loads `.env` before reading env). Use it from
-  `server.py`, every router, and standalone scripts like `seed.py`; never
-  construct another `AsyncIOMotorClient`. Collections are attributes:
-  `await db.status_checks.insert_one(...)`, `await db.status_checks.find().to_list(1000)`.
-  Motor connects lazily, so importing `server` never blocks on Mongo. `pymongo`
-  is installed too if you need a sync client in a script.
-- **Ids**: documents use a string `id` (`uuid4`) field, not Mongo's `ObjectId`
-  — `ObjectId` is not JSON-serializable and leaks into response bodies. Keep the
-  `uuid4` default-factory pattern from `StatusCheck`.
-- **Config**: `backend/.env` — `MONGO_URL` (connection string), `DB_NAME`
-  (database name), `CORS_ORIGINS`. `server.py` loads it with `python-dotenv`
-  above its local imports, and `lib/db.py` self-loads it so standalone scripts
-  inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
-  `localhost`. Add new secrets/config here; read them with `os.environ`.
-- **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
-  UTC; anchor "today" server-side with this, never with client-side date math.
-- **Interactive check**: `cd /app/backend && python -c 'import server'` catches
-  syntax/import errors without waiting for the supervisor log.
+## Tests
 
-## Frontend
-
-- Vite + React 19 + TypeScript strict, dev server on port `3000`.
-- Tailwind CSS v4 (via the `@tailwindcss/vite` plugin — no separate
-  `tailwind.config.js` needed) + shadcn/ui, initialized with the `base-nova`
-  style and `neutral` base color, `@` path alias (`@/*` → `src/*`) wired in both
-  `tsconfig.app.json`/`tsconfig.json` and `vite.config.ts`.
-- `react-router-dom` and `motion` are preinstalled — don't re-add them. `src/App.tsx`
-  is the `<Routes>` table and nothing else; screens live in `src/pages/*.tsx` and are
-  imported as `@/pages/<Name>`. `src/pages/Home.tsx` ships as the worked example. Add
-  a `<Route>` for every page you write, in the same edit that creates the page — a
-  page with no route is unreachable, and any URL without a matching `<Route>` renders a
-  **blank page** — `<Routes>` matches nothing and mounts nothing.
-- Components installed under `src/components/ui/`: button, card, input, label,
-  select, dialog, sheet, tabs, badge, calendar, sonner, textarea, table, popover,
-  dropdown-menu, checkbox. Add more with `npx shadcn@latest add <component>`.
-- `src/lib/api.ts` — the typed fetch layer: `apiGet<T>`, `apiPost<T>`,
-  `apiPut<T>`, `apiPatch<T>`, `apiDelete<T>`, all relative to base `/api`,
-  throwing `ApiError` (with `status` and the parsed body) on any non-2xx.
-  **Nothing infers across the Python boundary** — you declare the response type
-  yourself as a TS interface mirroring the endpoint's Pydantic model, and keeping
-  the two in sync is a manual discipline. When you change a Pydantic model,
-  change its TS interface in the same edit.
-- `src/pages/Home.tsx` is a minimal example of the wiring: TanStack Query's `useQuery`
-  with `apiGet<StatusCheck[]>("/status")` as the `queryFn`. It is a **non-blocking
-  connectivity probe**, not a proof of the round trip — the result is deliberately
-  discarded so the splash renders identically with no backend. `apiGet<T>` does no
-  runtime validation either; `T` is your assertion, not a check. See the
-  static-preview rule in `TEMPLATE.md` §4 for why no page may be gated on a fetch.
-
-## TypeScript
-
-`frontend/tsconfig.app.json` / `tsconfig.node.json` have `strict: true`. In the
-pod:
+**Backend (pytest)** — `backend/tests/`:
 
 ```bash
-cd frontend && yarn typecheck
+cd backend
+pytest            # parallel (-n 2, siehe pytest.ini); serial: pytest -n 0
 ```
 
-— plain `tsc --noEmit` run from `frontend/` checks ZERO files (root tsconfig uses
-project references with `"files": []`) and exits 0 even with type errors. Always
-use `-b` for the frontend. Lint with `cd frontend && yarn lint` (oxlint).
+Tests treffen den laufenden uvicorn-Prozess (`BACKEND_URL`, Default
+`http://localhost:8001`) — also erst Backend starten, dann testen.
 
-## Data fetching
-
-TanStack Query is wired: `QueryClientProvider` in `src/main.tsx`, `useQuery` demo
-in `src/pages/Home.tsx` (see above). Use `useQuery`/`useMutation`, not
-fetch-in-`useEffect`.
-
-## Completion gate (tier 1)
-
-When the build is complete, run tier 1 once, all in the same turn: a curl smoke
-over the key `/api` endpoints (assert status AND a response field, plus one
-negative case), `cd frontend && yarn typecheck`, and ONE happy-path browser pass
-through the core user journey. Clean on all three → finish; any failure is a real
-bug — fix it, re-run the failed check, and escalate to the testing subagent.
-No routine typecheck/lint/smoke passes during the build — tier 1 runs exactly once.
-
-
-## Testing
-
-Two lanes.
-
-**Backend (pytest)** — specs in `backend/tests/` as `test_*.py`, run with:
+**Frontend (Playwright)** — `tests/`:
 
 ```bash
-cd /app/backend && pytest
+cd tests
+npm install
+npx playwright install chromium
+npx playwright test
 ```
 
-`backend/pytest.ini` is canonical: `addopts = -n 2 --dist loadscope` (pytest-xdist,
-already parallel — do not pass your own `-n`) and `asyncio_mode = auto` (so
-`async def test_...` needs no marker). Serial is `-n 0`, **never**
-`-p no:xdist` (that errors, because `addopts` still passes `-n`/`--dist`).
-`backend/tests/conftest.py` is pre-scaffolded — a sync `client` fixture
-(`httpx.Client` rooted at `/api`), an async `aclient`, and an `api_url()` helper,
-all pointed at `BACKEND_URL` (default `http://localhost:8001`). Tests hit the
-live uvicorn process, so the app under test is the one the browser sees. Add
-app-specific fixtures below the marker; do not re-create the file.
+## Architektur
 
-**Frontend (Playwright)** — `/app/tests/` is pre-scaffolded:
-`playwright.config.ts` (canonical — edit the marked lines only),
-`fixtures/helpers.ts`, and a `package.json` that resolves
-`@playwright/test@1.62.0` (node_modules baked into the image). Write specs into
-`tests/e2e/`. Do NOT re-create the config/helpers or install/upgrade playwright —
-matching Chromium browsers live at `/pw-browsers`.
+Siehe `memory/SPEC.md` für die vollständige Spezifikation (Phasen, Fenster,
+Snapping, Sprache, Sitzung) und `backend/lib/llm.py` für das Multi-Provider-LLM-
+Layer. Kurz:
 
-The backend lane is pytest: this template's backend is Python, so `vitest` does
-not apply to it.
-
-## Pod conventions
-
-This template runs under supervisord in the Emergent agent pod — supersedes any
-local-run instructions above.
-
-- Backend, frontend, and `mongod` are each a supervisor program. After code or
-  config changes, restart and wait for readiness:
-
-  ```bash
-  sudo supervisorctl restart frontend backend
-  until curl -sf -o /dev/null http://localhost:3000; do sleep 2; done
-  ```
-
-- Status, only after a restart you triggered:
-  `sudo supervisorctl status frontend backend`. Logs:
-  `/var/log/supervisor/backend.err.log`, `backend.out.log`,
-  `frontend.err.log`.
-- App in a browser: the pod's preview URL (frontend, port `3000`). Backend API
-  directly at port `8001`.
-- `mongod` runs locally in the pod (`--bind_ip_all`); `MONGO_URL` in
-  `backend/.env` points at `localhost`, no separate Mongo container.
-- Both dev servers hot-reload on file edits (uvicorn `--reload` for the backend,
-  Vite HMR for the frontend); no rebuild step needed for normal iteration. A
-  restart is still needed after changing `.env`, `requirements.txt`, or
-  `vite.config.ts`.
+- **Backend-Routen** (alle unter `/api`): `/chat` (SSE-Streaming + Verlauf),
+  `/nova/command` (Intent-Routing), `/workspace` (Notes/Memory/Files/Tasks),
+  `/tts` (ElevenLabs).
+- **Frontend**: `useChatStream` läuft zentral in `Home.tsx`, damit NOVA auch
+  antworten + vorlesen kann, ohne dass das Chat-Fenster offen ist.
+- **Daten**: MongoDB-Collections `chat_messages`, `notes`, `memory`, `files`,
+  `tasks`, `nova_commands`. IDs sind String-`uuid4`, nie Mongo-`ObjectId`.

@@ -1,11 +1,16 @@
 import { Ear, EarOff, Volume2, VolumeX } from "lucide-react";
 import { ORB_LABELS, ORB_STATES, ORB_THEMES, type OrbState } from "@/lib/nova";
-import { useProviders } from "@/hooks/useNovaData";
+import { useProviders, useTtsStatus } from "@/hooks/useNovaData";
 
 export interface SpeechBridge {
   supported: boolean;
   enabled: boolean;
   speaking: boolean;
+  /** ElevenLabs konfiguriert? */
+  elevenlabs: boolean;
+  /** aktuell gewählte ElevenLabs-Stimme (oder null = Default) */
+  voiceId: string | null;
+  setVoiceId: (id: string | null) => void;
   setEnabled: (v: boolean) => void;
   test: () => void;
 }
@@ -154,6 +159,12 @@ export default function SettingsApp({
             Probe hören
           </button>
         </div>
+        <p className="mt-2 font-mono text-[10.5px] text-muted-foreground/55">
+          {speech.elevenlabs
+            ? "ElevenLabs aktiv — natürliche Stimme. Key in backend/.env (ELEVENLABS_API_KEY)."
+            : "Browser-Stimme. Für eine natürlichere Stimme ELEVENLABS_API_KEY in backend/.env eintragen."}
+        </p>
+        {speech.elevenlabs && <VoicePicker speech={speech} />}
       </Section>
 
       <Section title="Weckwort">
@@ -209,6 +220,39 @@ export default function SettingsApp({
           </button>
         </div>
       </Section>
+    </div>
+  );
+}
+
+/** ElevenLabs-Stimmauswahl — lädt die verfügbaren Stimmen vom Backend. */
+function VoicePicker({ speech }: { speech: SpeechBridge }) {
+  const tts = useTtsStatus();
+  const voices = tts.data?.voices ?? [];
+  const defaultId = tts.data?.default_voice_id ?? null;
+  const active = speech.voiceId ?? defaultId;
+
+  if (tts.isLoading) {
+    return <p className="mt-3 font-mono text-[10.5px] text-muted-foreground/55">Lade Stimmen …</p>;
+  }
+  if (voices.length === 0) {
+    return (
+      <p className="mt-3 font-mono text-[10.5px] text-muted-foreground/55">
+        Keine Stimmen gefunden — ELEVENLABS_VOICE_ID in backend/.env setzen.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 flex flex-wrap gap-2" data-testid="settings-voices">
+      {voices.map((v) => (
+        <Chip
+          key={v.id}
+          testid={`settings-voice-${v.id}`}
+          active={active === v.id}
+          onClick={() => speech.setVoiceId(active === v.id ? null : v.id)}
+        >
+          <span className="font-mono text-[10.5px]">{v.name}</span>
+        </Chip>
+      ))}
     </div>
   );
 }

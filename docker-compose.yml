@@ -1,0 +1,48 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: nova-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    # Nach außen nicht freigegeben — nur das Backend-Netzwerk erreicht Mongo.
+    networks:
+      - nova-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nova-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    # Im Container ist Mongo über den Service-Namen erreichbar.
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+    depends_on:
+      - mongo
+    ports:
+      - "8001:8001"
+    networks:
+      - nova-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nova-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - nova-net
+
+volumes:
+  mongo-data:
+
+networks:
+  nova-net:
+    driver: bridge
