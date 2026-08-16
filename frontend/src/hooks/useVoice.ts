@@ -54,6 +54,8 @@ export type VoiceMode = "off" | "wake" | "command";
 
 export interface VoiceApi {
   supported: boolean;
+  /** true when the browser/iframe refuses microphone access — listening is impossible */
+  blocked: boolean;
   /** true while actively listening for a command */
   listening: boolean;
   /** true while the wake word listener is armed */
