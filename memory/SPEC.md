@@ -2,6 +2,9 @@
 
 Ruhiges, fast schwarzes „KI-Betriebssystem“. Kein Login, keine echte KI (Mock-Intents im Backend).
 
+## Orb (Logo)
+Canvas-2D „Neuronen-Kugel“ in `src/components/nova/Orb.tsx`: 240 leicht zufällig gestreute Knoten auf einer Fibonacci-Kugel, per Nachbarschaft verbundene Synapsen plus längere Querfasern, 3D-rotiert und orthographisch projiziert. Hintere Hemisphäre → dunkler transluzenter Kern (occludiert) → vordere Hemisphäre → dünner Leuchtrand + Halo. Knoten/Kanten pulsieren phasenversetzt („atmendes Gehirn“), Farbe wird pro Zustand weich interpoliert, Rotation im Zustand `denken` schneller. NOVA-Schrift bleibt lesbar über dem dunklen Kern.
+
 ## Sprachbefehl (Mikrofon)
 - Ein Klick auf den Orb startet/stoppt das Zuhören (`src/hooks/useVoice.ts`): Web Speech API (de-DE, interim results) für den Text + AnalyserNode-RMS für den Live-Pegel (in einem Ref, per `getLevel()` vom Orb pro Frame gelesen).
 - Orb-Zustand `hoeren` (Cyan-Weiß): Ring-Radius, Ringstärke und ein zweiter Ring reagieren live auf die Lautstärke.
