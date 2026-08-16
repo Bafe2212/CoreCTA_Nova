@@ -59,8 +59,12 @@ async def get_status_checks():
     return [StatusCheck(**status_check) for status_check in status_checks]
 
 from routers.nova import router as nova_router
+from routers.chat import router as chat_router
+from routers.workspace import router as workspace_router
 
 api_router.include_router(nova_router)
+api_router.include_router(chat_router)
+api_router.include_router(workspace_router)
 
 # Include the router in the main app
 app.include_router(api_router)

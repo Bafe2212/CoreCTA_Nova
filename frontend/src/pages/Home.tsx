@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { ArrowUp } from "lucide-react";
 import Orb from "@/components/nova/Orb";
 import NovaWindow from "@/components/nova/NovaWindow";
+import type { DragInfo } from "@/components/nova/NovaWindow";
 import AppContent from "@/components/nova/AppContent";
 import CommandPalette from "@/components/nova/CommandPalette";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiPost } from "@/lib/api";
 import {
   APPS,
   ORB_LABELS,
@@ -20,14 +21,16 @@ import {
 import { DOCK_HEIGHT, useViewport, useWindowManager } from "@/hooks/useWindowManager";
 import { useVoice } from "@/hooks/useVoice";
 import { useSpeech } from "@/hooks/useSpeech";
+import { useProviders } from "@/hooks/useNovaData";
 
-const ORB_SIZE = 240;
-const DOCK_SCALE = 0.28;
+const ORB_SIZE = 340;
+const DOCK_SCALE = 0.2;
+/** spoken or typed commands that put NOVA back to sleep */
+const SLEEP_RE = /^(beenden|beende|beenden bitte|schlafen|schlaf|standby|aus|ausschalten|schluss|stopp|stop|feierabend|gute nacht)[.!]?$/i;
 
 export default function Home() {
   const viewport = useViewport();
   const wm = useWindowManager(viewport);
-  const queryClient = useQueryClient();
 
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [prompt, setPrompt] = useState("");
@@ -35,7 +38,15 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [speechEnabled, setSpeechEnabled] = useState(true);
+  const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
+  const [phase, setPhase] = useState<"standby" | "active">(
+    wm.windows.length > 0 ? "active" : "standby",
+  );
+  const [clock, setClock] = useState(() => new Date());
+  const lastActivity = useRef(Date.now());
+  const standbyRef = useRef<() => void>(() => undefined);
   const timers = useRef<number[]>([]);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
 
   const docked = wm.windows.length > 0;
 
@@ -48,10 +59,47 @@ export default function Home() {
 
   const speech = useSpeech(speechEnabled);
 
-  const history = useQuery({
-    queryKey: ["nova", "history"],
-    queryFn: () => apiGet<CommandResult[]>("/nova/history"),
-  });
+  const activate = useCallback(() => {
+    lastActivity.current = Date.now();
+    setPhase("active");
+  }, []);
+
+  // standby wall clock — only ticking while it is on screen
+  useEffect(() => {
+    if (phase !== "standby") return;
+    setClock(new Date());
+    const id = window.setInterval(() => setClock(new Date()), 15000);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  // which of the user's own providers answers — persisted, defaults from the server
+  const providers = useProviders();
+  const [provider, setProvider] = useState(
+    () => window.localStorage.getItem("nova.provider") ?? "",
+  );
+  const [model, setModel] = useState(() => window.localStorage.getItem("nova.model") ?? "");
+
+  useEffect(() => {
+    const status = providers.data;
+    if (!status) return;
+    const known = status.providers.find((p) => p.id === provider && p.configured);
+    if (!known) {
+      const fallback =
+        status.providers.find((p) => p.id === status.default_provider && p.configured) ??
+        status.providers.find((p) => p.configured);
+      if (fallback) {
+        setProvider(fallback.id);
+        setModel(fallback.models[0]);
+      }
+      return;
+    }
+    if (!known.models.includes(model)) setModel(known.models[0]);
+  }, [providers.data, provider, model]);
+
+  useEffect(() => {
+    if (provider) window.localStorage.setItem("nova.provider", provider);
+    if (model) window.localStorage.setItem("nova.model", model);
+  }, [provider, model]);
 
   const command = useMutation({
     mutationFn: (text: string) => apiPost<CommandResult>("/nova/command", { prompt: text }),
@@ -59,12 +107,16 @@ export default function Home() {
       setNotice(null);
       setOrbState("denken");
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["nova", "history"] });
-      setOrbState("antworten");
-      setNotice(result.reply);
+    onSuccess: (result, prompt) => {
       const target: AppId = isAppId(result.open_window) ? result.open_window : "chat";
       later(() => wm.open(target), 260);
+      if (target === "chat") {
+        // a real question — hand it to the chat window, which streams the answer
+        setPendingPrompt(prompt);
+        return;
+      }
+      setOrbState("antworten");
+      setNotice(result.reply);
       later(() => setOrbState("erfolg"), 1500);
       later(() => setOrbState("idle"), 2900);
       speech.speak(result.reply);
@@ -78,8 +130,15 @@ export default function Home() {
 
   const send = useCallback(
     (text: string) => {
-      if (!text.trim() || command.isPending) return;
-      command.mutate(text.trim());
+      const value = text.trim();
+      if (!value || command.isPending) return;
+      // „beenden“ sends NOVA back to the clock instead of to the backend
+      if (SLEEP_RE.test(value)) {
+        standbyRef.current();
+        return;
+      }
+      setPhase("active");
+      command.mutate(value);
     },
     [command],
   );
@@ -103,6 +162,47 @@ export default function Home() {
       ? "antworten"
       : orbState;
 
+  // NOVA wakes up whenever she starts listening (wake word included)
+  useEffect(() => {
+    if (voice.listening) activate();
+  }, [voice.listening, activate]);
+
+  // and slips back into standby after a long calm with nothing open
+  useEffect(() => {
+    const bump = () => {
+      lastActivity.current = Date.now();
+    };
+    window.addEventListener("pointerdown", bump);
+    window.addEventListener("keydown", bump);
+    const id = window.setInterval(() => {
+      if (
+        phase === "active" &&
+        wm.windows.length === 0 &&
+        !voice.listening &&
+        !speech.speaking &&
+        Date.now() - lastActivity.current > 90000
+      ) {
+        setPhase("standby");
+      }
+    }, 5000);
+    return () => {
+      window.removeEventListener("pointerdown", bump);
+      window.removeEventListener("keydown", bump);
+      window.clearInterval(id);
+    };
+  }, [phase, wm.windows.length, voice.listening, speech.speaking]);
+
+  const toStandby = useCallback(() => {
+    voice.stop();
+    speech.stop();
+    wm.closeAll();
+    setMenuOpen(false);
+    setNotice(null);
+    setPhase("standby");
+  }, [speech, voice, wm]);
+
+  standbyRef.current = toStandby;
+
   const openMenu = useCallback(() => {
     longPress.current = true;
     setMenuOpen((v) => !v);
@@ -122,6 +222,10 @@ export default function Home() {
       longPress.current = false;
       return;
     }
+    if (phase === "standby") {
+      activate();
+      return;
+    }
     if (!voice.supported) {
       setNotice("Dieser Browser kann nicht zuhören — tippe deinen Befehl ein.");
       setMenuOpen((v) => !v);
@@ -131,11 +235,15 @@ export default function Home() {
     setNotice(null);
     speech.stop();
     voice.toggle();
-  }, [voice, speech]);
+  }, [voice, speech, phase, activate]);
 
   // ⌘K / Ctrl+K palette, Esc closes palette → menu → topmost window
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (phase === "standby") {
+        if (e.key !== "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey) activate();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
@@ -151,7 +259,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, menuOpen, wm, voice, speech]);
+  }, [paletteOpen, menuOpen, wm, voice, speech, phase, activate]);
 
   const theme = ORB_THEMES[displayState];
   const orbY = docked ? viewport.h - 100 - ORB_SIZE / 2 : viewport.h * 0.42 - ORB_SIZE / 2;
@@ -161,6 +269,45 @@ export default function Home() {
       className="relative h-screen w-screen overflow-hidden bg-[#03070d] select-none"
       data-testid="nova-desktop"
     >
+      {/* faint HUD dot grid — appears when NOVA is awake */}
+      <motion.div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: [
+            "linear-gradient(rgba(125,205,225,0.075) 1px, transparent 1px)",
+            "linear-gradient(90deg, rgba(125,205,225,0.075) 1px, transparent 1px)",
+            "radial-gradient(rgba(148,197,214,0.16) 1px, transparent 1px)",
+          ].join(","),
+          backgroundSize: "58px 58px, 58px 58px, 29px 29px",
+          maskImage: "radial-gradient(80% 75% at 50% 50%, black, transparent 100%)",
+          WebkitMaskImage: "radial-gradient(80% 75% at 50% 50%, black, transparent 100%)",
+        }}
+        animate={{ opacity: phase === "active" ? 0.85 : 0 }}
+        transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+        data-testid="hud-grid"
+        data-hud-visible={phase === "active"}
+      />
+
+      {/* corner brackets */}
+      <motion.div
+        className="pointer-events-none absolute inset-0"
+        animate={{ opacity: phase === "active" ? 1 : 0 }}
+        transition={{ duration: 1.1, delay: phase === "active" ? 0.25 : 0 }}
+      >
+        {[
+          "top-4 left-4 border-t border-l",
+          "top-4 right-4 border-t border-r",
+          "bottom-4 left-4 border-b border-l",
+          "bottom-4 right-4 border-b border-r",
+        ].map((pos) => (
+          <span
+            key={pos}
+            className={`absolute size-7 border-cyan-300/20 ${pos}`}
+            aria-hidden="true"
+          />
+        ))}
+      </motion.div>
+
       {/* ambient light — the only background ornament */}
       <div
         className="pointer-events-none absolute inset-0 animate-[nova-drift_26s_ease-in-out_infinite]"
@@ -179,7 +326,11 @@ export default function Home() {
       />
 
       {/* system status — deliberately faint */}
-      <div className="pointer-events-none absolute top-6 left-7 flex items-center gap-2.5">
+      <motion.div
+        className="pointer-events-none absolute top-6 left-7 flex items-center gap-2.5"
+        animate={{ opacity: phase === "active" ? 1 : 0 }}
+        transition={{ duration: 0.8, delay: phase === "active" ? 0.3 : 0 }}
+      >
         <span
           className="size-1.5 rounded-full transition-colors duration-700"
           style={{ background: theme.primary, boxShadow: `0 0 10px ${theme.primary}` }}
@@ -198,10 +349,14 @@ export default function Home() {
             · Hey NOVA
           </span>
         )}
-      </div>
-      <span className="pointer-events-none absolute top-6 right-7 font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground/45 uppercase">
+      </motion.div>
+      <motion.span
+        className="pointer-events-none absolute top-6 right-7 font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground/45 uppercase"
+        animate={{ opacity: phase === "active" ? 1 : 0 }}
+        transition={{ duration: 0.8, delay: phase === "active" ? 0.3 : 0 }}
+      >
         ⌘K
-      </span>
+      </motion.span>
 
       {/* windows */}
       <AnimatePresence>
@@ -218,11 +373,13 @@ export default function Home() {
               onMinimize={() => wm.minimize(w.id)}
               onToggleMaximize={() => wm.toggleMaximize(w.id)}
               onRect={(r) => wm.setRect(w.id, r)}
+              onDragState={setDragInfo}
             >
               <AppContent
                 id={w.id}
                 orbState={orbState}
                 setOrbState={setOrbState}
+                llm={{ provider, model, setProvider, setModel }}
                 speech={{
                   supported: speech.supported,
                   enabled: speechEnabled,
@@ -245,18 +402,116 @@ export default function Home() {
                   reset: wm.resetSession,
                 }}
                 chat={{
-                  history: history.data ?? [],
-                  pending: command.isPending,
-                  send,
+                  provider,
+                  model,
+                  pendingPrompt,
+                  consumePending: () => setPendingPrompt(null),
+                  onStart: () => {
+                    setNotice(null);
+                    setOrbState("denken");
+                  },
+                  onFirstDelta: () => setOrbState("antworten"),
+                  onDone: (text) => {
+                    setOrbState("erfolg");
+                    later(() => setOrbState("idle"), 1600);
+                    speech.speak(text);
+                  },
+                  onError: (message) => {
+                    setOrbState("fehler");
+                    setNotice(message);
+                    later(() => setOrbState("idle"), 3200);
+                  },
                 }}
               />
             </NovaWindow>
           ))}
       </AnimatePresence>
 
+      {/* snap guides + half-screen preview while dragging */}
+      {dragInfo && (
+        <div className="pointer-events-none absolute inset-0 z-[185]" data-testid="snap-overlay">
+          {dragInfo.snap && (
+            <div
+              className="absolute rounded-xl border border-cyan-400/25 bg-cyan-400/[0.04]"
+              style={{
+                left: dragInfo.x,
+                top: dragInfo.y,
+                width: dragInfo.w,
+                height: dragInfo.h,
+                boxShadow: "0 0 40px -12px rgba(34,211,238,0.35)",
+                transition: "left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease",
+              }}
+              data-testid={`snap-preview-${dragInfo.snap}`}
+            />
+          )}
+          {dragInfo.guideX !== null && (
+            <div
+              className="absolute top-0 bottom-0 w-px"
+              style={{
+                left: dragInfo.guideX,
+                background:
+                  "linear-gradient(to bottom, transparent, rgba(34,211,238,0.28) 18%, rgba(34,211,238,0.28) 82%, transparent)",
+              }}
+              data-testid="snap-guide-vertical"
+            />
+          )}
+          {dragInfo.guideY !== null && (
+            <div
+              className="absolute right-0 left-0 h-px"
+              style={{
+                top: dragInfo.guideY,
+                background:
+                  "linear-gradient(to right, transparent, rgba(34,211,238,0.28) 18%, rgba(34,211,238,0.28) 82%, transparent)",
+              }}
+              data-testid="snap-guide-horizontal"
+            />
+          )}
+        </div>
+      )}
+
+      {/* standby: just the dimmed sphere, the time and a whisper of a hint */}
+      <AnimatePresence>
+        {phase === "standby" && (
+          <motion.div
+            key="standby"
+            className="pointer-events-none absolute inset-x-0 z-[120] flex flex-col items-center"
+            style={{ top: viewport.h * 0.42 + ORB_SIZE / 2 + 26 }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -14, filter: "blur(6px)", transition: { duration: 0.5 } }}
+            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+            data-testid="standby-screen"
+          >
+            <p
+              className="font-heading text-[64px] leading-none font-light tracking-[0.02em] text-white/85"
+              style={{ textShadow: "0 0 40px rgba(34,211,238,0.18)" }}
+              data-testid="standby-clock"
+            >
+              {clock.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+            <p
+              className="mt-3 font-mono text-[11px] tracking-[0.3em] text-muted-foreground/55 uppercase"
+              data-testid="standby-date"
+            >
+              {clock.toLocaleDateString("de-DE", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+            <p
+              className="mt-12 font-mono text-[10px] tracking-[0.26em] text-muted-foreground/35 uppercase"
+              data-testid="standby-hint"
+            >
+              {voice.wakeEnabled ? "Sag „Hey NOVA“" : "Orb antippen, um NOVA zu wecken"}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* centre stage — only while nothing is open */}
       <AnimatePresence>
-        {!docked && (
+        {!docked && phase === "active" && (
           <motion.div
             key="stage"
             className="absolute inset-x-0 z-[120] flex flex-col items-center"
@@ -280,19 +535,19 @@ export default function Home() {
               }}
               className="group mt-9 w-[min(520px,84vw)]"
             >
-              <div className="flex items-center gap-3 border-b border-white/[0.06] pb-2.5 transition-colors duration-500 group-hover:border-white/[0.14] focus-within:border-cyan-400/40">
+              <div className="relative flex items-center border-b border-white/[0.06] pb-2.5 transition-colors duration-500 group-hover:border-white/[0.14] focus-within:border-cyan-400/40">
                 <input
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Sag NOVA, was du brauchst"
                   data-testid="nova-command-input"
-                  className="w-full bg-transparent text-center text-[14px] text-foreground/90 opacity-60 outline-none transition-opacity duration-500 group-hover:opacity-100 placeholder:text-muted-foreground/45 focus:opacity-100"
+                  className="w-full bg-transparent px-9 text-center text-[14px] text-foreground/90 opacity-60 outline-none transition-opacity duration-500 group-hover:opacity-100 placeholder:text-muted-foreground/45 focus:opacity-100"
                 />
                 <button
                   type="submit"
                   aria-label="Befehl senden"
                   data-testid="nova-command-submit"
-                  className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground/50 opacity-0 transition-all duration-300 group-hover:opacity-100 hover:text-cyan-200 focus:opacity-100"
+                  className="absolute right-0 bottom-2.5 grid size-7 place-items-center rounded-full text-muted-foreground/50 opacity-0 transition-all duration-300 group-hover:opacity-100 hover:text-cyan-200 focus:opacity-100"
                 >
                   <ArrowUp className="size-3.5" />
                 </button>
@@ -334,6 +589,7 @@ export default function Home() {
         aria-label={voice.listening ? "Zuhören beenden" : "NOVA zuhören lassen"}
         data-testid="nova-orb"
         data-orb-mode={docked ? "dock" : "center"}
+        data-orb-phase={phase}
         data-listening={voice.listening}
         onClick={onOrbClick}
         onPointerDown={onOrbPressStart}
@@ -348,7 +604,13 @@ export default function Home() {
         animate={{ x: -ORB_SIZE / 2, y: orbY, scale: docked ? DOCK_SCALE : 1 }}
         transition={{ type: "spring", stiffness: 190, damping: 24, mass: 0.9 }}
       >
-        <Orb state={displayState} size={ORB_SIZE} label={!docked} getLevel={voice.getLevel} />
+        <Orb
+          state={displayState}
+          size={ORB_SIZE}
+          label={!docked}
+          getLevel={voice.getLevel}
+          variant={phase}
+        />
       </motion.button>
 
       {/* live transcript while NOVA listens */}
@@ -432,6 +694,14 @@ export default function Home() {
                   Vorlesen beenden
                 </button>
               )}
+              <button
+                type="button"
+                data-testid="orb-menu-standby"
+                onClick={toStandby}
+                className="font-mono text-[11px] text-muted-foreground/70 transition-colors duration-200 hover:text-foreground"
+              >
+                Standby
+              </button>
               <button
                 type="button"
                 data-testid="orb-menu-wake"

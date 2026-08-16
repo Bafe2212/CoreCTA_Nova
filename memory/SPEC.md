@@ -1,47 +1,37 @@
-# NOVA — persönlicher KI-Assistent (UI-Prototyp)
+# NOVA — persönlicher KI-Assistent
 
-Ruhiges, fast schwarzes „KI-Betriebssystem“. Kein Login, keine echte KI (Mock-Intents im Backend).
+Ruhiges, fast schwarzes „KI-Betriebssystem". Kein Login. Echte KI über die eigenen Keys des Nutzers (GPT / Gemini / GLM), Daten persistent in MongoDB.
 
-## Orb (Logo)
-Canvas-2D „Neuronen-Kugel“ in `src/components/nova/Orb.tsx`: 240 leicht zufällig gestreute Knoten auf einer Fibonacci-Kugel, per Nachbarschaft verbundene Synapsen plus längere Querfasern, 3D-rotiert und orthographisch projiziert. Hintere Hemisphäre → dunkler transluzenter Kern (occludiert) → vordere Hemisphäre → dünner Leuchtrand + Halo. Knoten/Kanten pulsieren phasenversetzt („atmendes Gehirn“), Farbe wird pro Zustand weich interpoliert, Rotation im Zustand `denken` schneller. NOVA-Schrift bleibt lesbar über dem dunklen Kern.
+## Zwei Phasen
+- **Standby** (Startzustand): gedimmte Punkt-/Netz-Kugel (340 px), großes Uhrzeit-Display + Datum (`standby-clock`, `standby-date`), kein HUD-Raster, keine Eingabe, keine Statuszeile. Testid `standby-screen`.
+- **Aktiv**: Zünd-Animation (Shockwave, Ring/Bögen/Punktekranz blenden über `mix`-Lerp ein), HUD-Gitter aus Linien + Punkten (`hud-grid`, `data-hud-visible`, 58 px), Ecken-Klammern, Statuszeile, Begrüßung + Eingabefeld.
+- Wecken: Klick auf den Orb, beliebige Taste, Weckwort „Hey NOVA" oder ein gesendeter Befehl. Schlafen: Eingabe „beenden" (auch beende/standby/aus/schluss/stopp/gute nacht — `SLEEP_RE` in Home.tsx, greift vor dem Backend-Call), Orb-Menü → „Standby" (`orb-menu-standby`) oder 90 s ohne Interaktion bei geschlossenen Fenstern. Wiederhergestellte Sitzung startet direkt aktiv.
 
-## Weckwort „Hey NOVA“
-`useVoice` hat zwei Modi: `wake` (continuous, erkennt /(hey|hallo|ok|okay)[ ,!.]*nova/i im Hintergrund) und `command` (aktives Zuhören mit Pegel + Transkript). Weckwort erkannt → automatisch Kommando-Modus; nach dem Befehl kehrt es in den Wartemodus zurück. Während NOVA spricht, wird der Wake-Listener pausiert (`wakePaused`), damit sie sich nicht selbst hört. Ein/Aus: Einstellungen → Weckwort (`settings-wake-toggle`) oder Orb-Menü (`orb-menu-wake`); armiert erscheint oben links „· Hey NOVA“ (`wake-indicator`). Abgelehnter Mikrofonzugriff schaltet das Weckwort automatisch ab.
+## Backend (alle Routen auf api_router, Prefix /api)
+`backend/lib/llm.py` — drei Anbieter, ein normalisiertes Format. Keys aus backend/.env via os.environ, nie im Frontend:
+- `openai` → AsyncOpenAI, Modelle gpt-5.2 / gpt-5.2-mini / gpt-4.1 / gpt-4o (OPENAI_API_KEY gesetzt)
+- `gemini` → google-genai `client.aio`, Modelle gemini-2.5-flash / 2.5-pro / 2.0-flash (GEMINI_API_KEY leer → 503/„nicht konfiguriert")
+- `zhipu` → AsyncOpenAI mit `ZHIPU_BASE_URL` (https://api.z.ai/api/paas/v4/), Modelle glm-4.6 / glm-4.5-air / glm-4-plus (ZHIPUAI_API_KEY leer)
+- Systemprompt: NOVA antwortet deutsch, ruhig, knapp. Fehler werden auf 401 / 429 / 400 / 502 normalisiert, ohne Keys zu leaken.
 
-## Sitzungs-Layouts
-`useWindowManager` lädt/speichert die offenen Fenster (id, rect, z, minimized) in `localStorage["nova.session.v1"]` — jede Änderung wird gespeichert, beim Start werden die Fenster auf den aktuellen Viewport geklemmt wiederhergestellt (Orb startet dann direkt im Dock). Maximierte Fenster werden mit ihrem Restore-Rect gesichert. Zurücksetzen: Einstellungen → Sitzung → „Layout zurücksetzen“ (`settings-session-reset`).
-
-## Sprachausgabe (TTS)
-`src/hooks/useSpeech.ts`: Web-Speech-Synthese (de-DE, rate 0.97). Jede Antwort wird vorgelesen; solange `speaking` true ist, zeigt der Orb den Zustand `antworten` mit synthetischer Sprech-Modulation (Radius/Ring pulsieren). Ein/Aus + „Probe hören" in Einstellungen → Stimme (`settings-speech-toggle`, `settings-speech-test`). Zuhören stoppt das Vorlesen, Esc ebenfalls; Orb-Menü zeigt „Vorlesen beenden" während gesprochen wird. Fehlende TTS-Engine wird abgefangen und blockiert nie den Befehlsfluss.
-
-## Aktivitäts-Impulse
-Im Orb wandern 18 Lichtimpulse mit Schweif entlang der Synapsen (nur sichtbare Hemisphäre). Intensität: `denken` 1.0 (doppelte Geschwindigkeit), `antworten` 0.7, `hoeren` 0.4, sonst 0.14.
-
-## Sprachbefehl (Mikrofon)
-- Ein Klick auf den Orb startet/stoppt das Zuhören (`src/hooks/useVoice.ts`): Web Speech API (de-DE, interim results) für den Text + AnalyserNode-RMS für den Live-Pegel (in einem Ref, per `getLevel()` vom Orb pro Frame gelesen).
-- Orb-Zustand `hoeren` (Cyan-Weiß): Ring-Radius, Ringstärke und ein zweiter Ring reagieren live auf die Lautstärke.
-- Finales Transkript wird automatisch als Befehl an POST /api/nova/command geschickt → Fenster öffnet sich wie bei Texteingabe.
-- Fehlender Mikrofonzugriff / kein Browser-Support → Orb-Zustand `fehler` + Hinweistext, Texteingabe bleibt nutzbar (kein Blocker).
-- Orb-Menü (Zustände etc.) jetzt per Langdruck (450 ms) oder Rechtsklick auf den Orb; es enthält zusätzlich „Zuhören starten/beenden“. Esc stoppt zuerst das Zuhören.
-
-## Kernflüsse
-1. Startscreen: zentraler Canvas-Orb (240px) + „Wie kann ich dir helfen?“ + minimalistisches Eingabefeld.
-2. Befehl senden → Orb-Zustand `denken` → POST /api/nova/command → `antworten` → passendes Fenster öffnet sich → `erfolg` → `idle`. Orb skaliert dabei auf 0.28 und wandert ins Dock (unten mittig).
-3. Fenster: drag (Header), resize (Ecke unten rechts), minimieren, maximieren/restore (Doppelklick auf Header oder Button), schließen, Z-Order per Klick, mehrere gleichzeitig.
-4. Dock (nur wenn Fenster offen): 7 App-Icons, Punkt = offen (cyan) / minimiert (grau).
-5. Orb-Klick → Menü mit 6 Zuständen (Bereit, Denken, Antworten, Erfolg, Warnung, Fehler) + „Neuer Befehl (⌘K)“ + „NOVA in den Vordergrund“ (schließt alle Fenster).
-6. ⌘K / Ctrl+K → Command Palette, Enter öffnet ersten Treffer. Esc: Palette → Orb-Menü → oberstes Fenster.
-
-## Apps (Mock-Inhalte)
-chat (nutzt /api/nova/history + /api/nova/command), browser, files, memory, schule, notizen, einstellungen (Orb-Zustandsumschalter).
-
-## Backend
-`backend/routers/nova.py` auf api_router:
-- POST /api/nova/command {prompt} → {id, prompt, reply, orb_state, open_window, created_at}; Intent-Keywords mappen auf Fenster-ID, Fallback `chat`. Leerer/fehlender prompt → 422.
-- GET /api/nova/history?limit= → Liste (chronologisch)
-- GET /api/nova/meta → {states, apps}
-Collection: `nova_commands`.
+`backend/routers/chat.py` (Prefix /chat): GET /providers, GET /messages, DELETE /messages, POST /message (nicht-streamend), GET /stream (SSE: `{user_message}` → `{delta}`… → `{done,message}` oder `{error}`; speichert User- und Assistant-Nachricht).
+`backend/routers/workspace.py`: /notes (GET/POST/PUT/DELETE), /memory (GET/POST/DELETE), /files (GET/POST/DELETE), /tasks (GET/POST/PATCH/DELETE).
+`backend/routers/nova.py`: POST /nova/command (Keyword-Intent → Fenster-ID; MOCK-Antwort nur für Nicht-Chat-Fenster), GET /nova/history, GET /nova/meta.
+Collections: chat_messages, notes, memory, files, tasks, nova_commands.
+Modelle in `backend/models/nova.py`, TS-Zwillinge in `frontend/src/lib/types.ts`.
 
 ## Frontend
-`src/lib/nova.ts` (Typen/Themes/Apps), `src/hooks/useWindowManager.ts`, `src/components/nova/{Orb,NovaWindow,AppContent,CommandPalette}.tsx`, `src/pages/Home.tsx`.
-Fonts: Sora (Headings), Geist, Geist Mono. Kein Auth, keine Credentials.
+- `src/hooks/useNovaData.ts` — TanStack-Query-Hooks je Ressource (Keys: chat/providers, chat/messages, notes, memory, files, tasks).
+- `src/hooks/useChatStream.ts` — EventSource auf `/api/chat/stream`, Deltas → Live-Text, am Ende Invalidierung von chat/messages; Callbacks steuern die Orb-Zustände (denken → antworten → erfolg) und die Sprachausgabe.
+- Fenster-Apps in `src/components/nova/apps/`: ChatApp (echte Antworten, Verlauf, leeren), NotesApp (Liste + Editor, Autosave 700 ms), MemoryApp, FilesApp, SchoolApp (Aufgaben abhaken), SettingsApp (Anbieter/Modell, Stimme, Weckwort, Orb-Zustand, Sitzung). BrowserApp bleibt MOCK.
+- Anbieter/Modell in Home-State, persistiert in localStorage (`nova.provider`, `nova.model`), Default vom Server.
+- Eine Eingabe auf dem Startscreen geht an POST /nova/command: Fenster-Intent öffnet das Fenster; zielt sie auf Chat, wird der Prompt als `pendingPrompt` an ChatApp übergeben und dort echt gestreamt.
+
+## Fenster-Snapping
+Magnet (14 px) auf Ränder (24) und Bildschirmmitte mit Hilfslinien (`snap-guide-vertical|horizontal`); Randzonen (≤30 px links/rechts, ≤8 px oben) zeigen `snap-preview-left|right|max` und rasten auf halbe Fläche bzw. Vollbild ein.
+
+## Sprache
+`useVoice` (Weckwort + Kommando-Modus, Live-Pegel für den Orb), `useSpeech` (TTS de-DE, Orb im Sprech-Zustand). Beides braucht echte Browser-Engines + Mikrofon.
+
+## Sitzung
+Offene Fenster (id, rect, z, minimized) in `localStorage["nova.session.v1"]`; Reset in Einstellungen → Sitzung.

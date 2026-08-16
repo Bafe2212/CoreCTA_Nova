@@ -14,12 +14,45 @@ interface Props {
   onMinimize: () => void;
   onToggleMaximize: () => void;
   onRect: (rect: Rect) => void;
+  onDragState: (info: DragInfo | null) => void;
   children: React.ReactNode;
 }
 
 const MIN_W = 320;
 const MIN_H = 220;
+const EDGE = 24;
+const MAGNET = 14;
+const SNAP_ZONE = 30;
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
+export type SnapKind = "left" | "right" | "max";
+
+export interface DragInfo {
+  /** live rect of the dragged window */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** screen positions of the alignment guides, if any */
+  guideX: number | null;
+  guideY: number | null;
+  snap: SnapKind | null;
+}
+
+/** Half-screen / full-screen target rects for the snap zones. */
+export function snapRect(kind: SnapKind, viewport: { w: number; h: number }): Rect {
+  const h = viewport.h - DOCK_HEIGHT - EDGE;
+  if (kind === "max") return { x: EDGE, y: EDGE, w: viewport.w - EDGE * 2, h };
+  const w = (viewport.w - EDGE * 3) / 2;
+  return { x: kind === "left" ? EDGE : EDGE * 2 + w, y: EDGE, w, h };
+}
+
+function magnet(raw: number, targets: number[]): { value: number; hit: number | null } {
+  for (let i = 0; i < targets.length; i++) {
+    if (Math.abs(raw - targets[i]) < MAGNET) return { value: targets[i], hit: i };
+  }
+  return { value: raw, hit: null };
+}
 
 export default function NovaWindow({
   win,
@@ -30,13 +63,42 @@ export default function NovaWindow({
   onMinimize,
   onToggleMaximize,
   onRect,
+  onDragState,
   children,
 }: Props) {
   const def = APP_MAP[win.id];
   const Icon = def.icon;
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
   const [grow, setGrow] = useState<{ dw: number; dh: number } | null>(null);
+  const [snap, setSnap] = useState<SnapKind | null>(null);
   const startRef = useRef({ px: 0, py: 0 });
+
+  /** magnetised position + which guides it aligned to */
+  const resolveDrag = (dx: number, dy: number) => {
+    const { w, h } = win.rect;
+    const xs = [EDGE, (viewport.w - w) / 2, viewport.w - w - EDGE];
+    const ys = [EDGE, (viewport.h - DOCK_HEIGHT - h) / 2, viewport.h - DOCK_HEIGHT - h - EDGE];
+    const mx = magnet(win.rect.x + dx, xs);
+    const my = magnet(win.rect.y + dy, ys);
+    const guideX =
+      mx.hit === null ? null : mx.hit === 0 ? EDGE : mx.hit === 1 ? viewport.w / 2 : viewport.w - EDGE;
+    const guideY =
+      my.hit === null
+        ? null
+        : my.hit === 0
+          ? EDGE
+          : my.hit === 1
+            ? (viewport.h - DOCK_HEIGHT) / 2
+            : viewport.h - DOCK_HEIGHT - EDGE;
+    return { x: mx.value, y: my.value, guideX, guideY };
+  };
+
+  const zoneFor = (px: number, py: number): SnapKind | null => {
+    if (py <= 8) return "max";
+    if (px <= SNAP_ZONE) return "left";
+    if (px >= viewport.w - SNAP_ZONE) return "right";
+    return null;
+  };
 
   const beginDrag = (e: React.PointerEvent) => {
     if (win.maximized) return;
@@ -48,18 +110,49 @@ export default function NovaWindow({
 
   const moveDrag = (e: React.PointerEvent) => {
     if (!drag) return;
-    setDrag({ dx: e.clientX - startRef.current.px, dy: e.clientY - startRef.current.py });
+    const dx = e.clientX - startRef.current.px;
+    const dy = e.clientY - startRef.current.py;
+    setDrag({ dx, dy });
+    const zone = zoneFor(e.clientX, e.clientY);
+    setSnap(zone);
+    const r = resolveDrag(dx, dy);
+    if (zone) {
+      const target = snapRect(zone, viewport);
+      onDragState({ ...target, guideX: null, guideY: null, snap: zone });
+    } else {
+      onDragState({
+        x: r.x,
+        y: r.y,
+        w: win.rect.w,
+        h: win.rect.h,
+        guideX: r.guideX,
+        guideY: r.guideY,
+        snap: null,
+      });
+    }
   };
 
   const endDrag = (e: React.PointerEvent) => {
     if (!drag) return;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    const zone = snap;
+    setDrag(null);
+    setSnap(null);
+    onDragState(null);
+    if (zone === "max") {
+      if (!win.maximized) onToggleMaximize();
+      return;
+    }
+    if (zone) {
+      onRect(snapRect(zone, viewport));
+      return;
+    }
+    const r = resolveDrag(drag.dx, drag.dy);
     onRect({
       ...win.rect,
-      x: clamp(win.rect.x + drag.dx, -win.rect.w + 120, viewport.w - 120),
-      y: clamp(win.rect.y + drag.dy, 8, viewport.h - DOCK_HEIGHT + 40),
+      x: clamp(r.x, -win.rect.w + 120, viewport.w - 120),
+      y: clamp(r.y, 8, viewport.h - DOCK_HEIGHT + 40),
     });
-    setDrag(null);
   };
 
   const beginResize = (e: React.PointerEvent) => {
@@ -88,8 +181,9 @@ export default function NovaWindow({
   };
 
   const interacting = drag !== null || grow !== null;
-  const x = win.rect.x + (drag?.dx ?? 0);
-  const y = win.rect.y + (drag?.dy ?? 0);
+  const resolved = drag ? resolveDrag(drag.dx, drag.dy) : null;
+  const x = resolved ? resolved.x : win.rect.x;
+  const y = resolved ? resolved.y : win.rect.y;
   const w = Math.max(MIN_W, win.rect.w + (grow?.dw ?? 0));
   const h = Math.max(MIN_H, win.rect.h + (grow?.dh ?? 0));
 

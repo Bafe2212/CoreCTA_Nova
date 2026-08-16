@@ -63,7 +63,7 @@ export interface OrbTheme {
 }
 
 export const ORB_THEMES: Record<OrbState, OrbTheme> = {
-  idle: { primary: "#06b6d4", secondary: "#3b82f6", glow: "rgba(6,182,212,0.40)", speed: 5.5 },
+  idle: { primary: "#22d3ee", secondary: "#38bdf8", glow: "rgba(34,211,238,0.42)", speed: 5.5 },
   hoeren: { primary: "#67e8f9", secondary: "#e2f5ff", glow: "rgba(103,232,249,0.50)", speed: 3.2 },
   denken: { primary: "#8b5cf6", secondary: "#3b82f6", glow: "rgba(139,92,246,0.50)", speed: 2.6 },
   antworten: { primary: "#f8fafc", secondary: "#06b6d4", glow: "rgba(226,240,252,0.55)", speed: 1.9 },
