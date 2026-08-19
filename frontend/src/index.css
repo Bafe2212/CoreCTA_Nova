@@ -121,6 +121,67 @@
     to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
+/* === JARVIS HUD Animationen === */
+
+/* Scan-Linie, die periodisch über den Bildschirm läuft */
+@keyframes hud-scanline {
+    0% { transform: translateY(-100vh); opacity: 0; }
+    8% { opacity: 0.55; }
+    92% { opacity: 0.55; }
+    100% { transform: translateY(100vh); opacity: 0; }
+}
+
+/* Schwebende Partikel im Hintergrund */
+@keyframes hud-particle {
+    0% { transform: translate3d(0, 0, 0); opacity: 0; }
+    10% { opacity: 0.7; }
+    90% { opacity: 0.5; }
+    100% { transform: translate3d(var(--px, 20px), var(--py, -120px), 0); opacity: 0; }
+}
+
+/* Boot-Sequence: Ringe bauen sich auf */
+@keyframes hud-boot-ring {
+    0% { stroke-dashoffset: 1000; opacity: 0; }
+    40% { opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+/* Sanftes Pulsieren für Glow */
+@keyframes hud-pulse-glow {
+    0%, 100% { opacity: 0.4; filter: blur(8px); }
+    50% { opacity: 0.75; filter: blur(12px); }
+}
+
+/* Glowing Border für Eingabefelder */
+@keyframes hud-border-glow {
+    0%, 100% { box-shadow: 0 0 8px rgba(34,211,238,0.25), inset 0 0 8px rgba(34,211,238,0.08); }
+    50% { box-shadow: 0 0 16px rgba(34,211,238,0.45), inset 0 0 12px rgba(34,211,238,0.15); }
+}
+
+/* Floating-Panel Eintritts-Animation */
+@keyframes hud-panel-in {
+    0% { opacity: 0; transform: translate3d(-30px, 0, 0) scale(0.96); filter: blur(8px); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+
+/* Status-Text Blink */
+@keyframes hud-status-blink {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* Rotierender HUD-Ring */
+@keyframes hud-ring-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Musik-Fortschrittsbalken */
+@keyframes hud-progress {
+    from { width: 0%; }
+    to { width: 100%; }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

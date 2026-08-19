@@ -41,40 +41,59 @@ export default function ChatApp({ chat }: { chat: ChatBridge }) {
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4" data-testid="chat-transcript">
         {list.length === 0 && !chat.pending && (
-          <p className="font-mono text-[11.5px] text-muted-foreground/70">
+          <p className="font-mono text-[11.5px] text-cyan-300/60">
             Noch keine Konversation. Frag NOVA etwas — sie antwortet über {chat.provider || "deinen Anbieter"}.
           </p>
         )}
         {list.map((msg) =>
           msg.role === "user" ? (
-            <p
-              key={msg.id}
-              className="text-right text-[13.5px] text-foreground/90"
-              data-testid={`chat-user-${msg.id}`}
-            >
-              {msg.content}
-            </p>
+            <div key={msg.id} className="flex justify-end" data-testid={`chat-user-${msg.id}`}>
+              <div
+                className="max-w-[85%] rounded-lg rounded-br-sm border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-1.5 text-right text-[13px] text-foreground/90"
+                style={{ boxShadow: "0 0 12px -4px rgba(34,211,238,0.3)" }}
+              >
+                {msg.content}
+              </div>
+            </div>
           ) : (
             <div key={msg.id} className="flex gap-2.5" data-testid={`chat-assistant-${msg.id}`}>
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-cyan-400/80 shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
-              <div>
-                <p className="text-[13.5px] whitespace-pre-wrap text-foreground/75">{msg.content}</p>
+              <span
+                className="mt-1.5 size-1.5 shrink-0 rounded-full bg-cyan-400/80"
+                style={{
+                  boxShadow: "0 0 10px rgba(34,211,238,0.8)",
+                  animation: "hud-status-blink 2s ease-in-out infinite",
+                }}
+              />
+              <div className="max-w-[85%]">
+                <p className="whitespace-pre-wrap text-[13px] text-foreground/80" style={{ textShadow: "0 0 6px rgba(34,211,238,0.15)" }}>
+                  {msg.content}
+                </p>
                 {msg.model && (
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground/45">{msg.model}</p>
+                  <p className="mt-1 font-mono text-[9.5px] tracking-wider text-cyan-300/40">
+                    {msg.model}
+                  </p>
                 )}
               </div>
             </div>
           ),
         )}
         {chat.pending && (
-          <p className="text-right text-[13.5px] text-foreground/90" data-testid="chat-pending-user">
-            {chat.pending}
-          </p>
+          <div className="flex justify-end" data-testid="chat-pending-user">
+            <div
+              className="max-w-[85%] rounded-lg rounded-br-sm border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-1.5 text-right text-[13px] text-foreground/90"
+              style={{ boxShadow: "0 0 12px -4px rgba(34,211,238,0.3)" }}
+            >
+              {chat.pending}
+            </div>
+          </div>
         )}
         {chat.streaming && (
           <div className="flex gap-2.5" data-testid="chat-streaming">
-            <span className="mt-1.5 size-1.5 shrink-0 animate-pulse rounded-full bg-violet-400/90 shadow-[0_0_10px_rgba(167,139,250,0.8)]" />
-            <p className="text-[13.5px] whitespace-pre-wrap text-foreground/75">
+            <span
+              className="mt-1.5 size-1.5 shrink-0 animate-pulse rounded-full bg-violet-400/90"
+              style={{ boxShadow: "0 0 10px rgba(167,139,250,0.8)" }}
+            />
+            <p className="whitespace-pre-wrap text-[13px] text-foreground/80" style={{ textShadow: "0 0 6px rgba(139,92,246,0.15)" }}>
               {chat.partial || (
                 <span className="font-mono text-[11px] tracking-widest text-violet-300/70">
                   NOVA denkt …
@@ -93,14 +112,14 @@ export default function ChatApp({ chat }: { chat: ChatBridge }) {
 
       <form
         onSubmit={submit}
-        className="flex shrink-0 items-center gap-2 border-t border-white/[0.05] px-4 py-3"
+        className="flex shrink-0 items-center gap-2 border-t border-cyan-400/15 px-4 py-3"
       >
         <button
           type="button"
           aria-label="Verlauf leeren"
           data-testid="chat-clear-button"
           onClick={() => clear.mutate()}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors duration-200 hover:bg-white/5 hover:text-foreground"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-cyan-300/50 transition-colors duration-200 hover:bg-cyan-400/10 hover:text-cyan-200"
         >
           <Eraser className="size-3.5" />
         </button>
@@ -110,14 +129,18 @@ export default function ChatApp({ chat }: { chat: ChatBridge }) {
           placeholder={chat.streaming ? "NOVA antwortet …" : "Nachricht an NOVA"}
           disabled={chat.streaming}
           data-testid="chat-input"
-          className="h-9 border-transparent bg-white/[0.03] text-[13px] transition-colors duration-300 focus-visible:border-cyan-500/40"
+          className="h-9 border-cyan-400/20 bg-cyan-400/[0.04] font-mono text-[12.5px] text-cyan-50 placeholder:text-cyan-300/40 transition-all duration-300 focus-visible:border-cyan-400/50 focus-visible:bg-cyan-400/[0.08]"
+          style={{
+            boxShadow: "inset 0 0 8px rgba(34,211,238,0.08)",
+          }}
         />
         <button
           type="submit"
           aria-label="Nachricht senden"
           data-testid="chat-send-button"
           disabled={chat.streaming}
-          className="grid size-9 shrink-0 place-items-center rounded-lg text-cyan-300/70 transition-colors duration-200 hover:bg-cyan-400/10 hover:text-cyan-200 disabled:opacity-40"
+          className="grid size-9 shrink-0 place-items-center rounded-lg border border-cyan-400/30 text-cyan-300/80 transition-all duration-200 hover:bg-cyan-400/15 hover:text-cyan-100 disabled:opacity-40"
+          style={{ boxShadow: "0 0 12px -4px rgba(34,211,238,0.4)" }}
         >
           <Send className="size-4" />
         </button>

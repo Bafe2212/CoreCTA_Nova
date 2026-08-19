@@ -191,13 +191,13 @@ export default function NovaWindow({
     <motion.section
       data-testid={`window-${win.id}`}
       data-active={active}
-      className="absolute left-0 top-0 flex flex-col overflow-hidden rounded-xl border bg-[#060c15]/85 backdrop-blur-xl"
+      className="absolute left-0 top-0 flex flex-col overflow-hidden rounded-2xl border bg-[#050b13]/80 backdrop-blur-xl"
       style={{
         zIndex: win.z,
-        borderColor: active ? "rgba(34,211,238,0.22)" : "rgba(148,163,184,0.12)",
+        borderColor: active ? "rgba(34,211,238,0.3)" : "rgba(148,163,184,0.14)",
         boxShadow: active
-          ? "0 30px 80px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(34,211,238,0.05)"
-          : "0 24px 60px -30px rgba(0,0,0,0.85)",
+          ? "0 30px 80px -30px rgba(0,0,0,0.9), 0 0 40px -10px rgba(34,211,238,0.35), inset 0 0 30px rgba(34,211,238,0.04)"
+          : "0 24px 60px -30px rgba(0,0,0,0.85), 0 0 20px -10px rgba(34,211,238,0.15)",
       }}
       initial={{ opacity: 0, scale: 0.94, x, y, width: w, height: h }}
       animate={{ opacity: 1, scale: 1, x, y, width: w, height: h }}
@@ -211,15 +211,18 @@ export default function NovaWindow({
     >
       <header
         data-testid={`window-header-${win.id}`}
-        className="flex h-10 shrink-0 cursor-grab items-center gap-2 border-b border-white/[0.05] px-3 active:cursor-grabbing"
+        className="relative flex h-10 shrink-0 cursor-grab items-center gap-2 border-b border-cyan-400/15 px-3 active:cursor-grabbing"
         onPointerDown={beginDrag}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onDoubleClick={onToggleMaximize}
       >
-        <Icon className="size-3.5 text-cyan-300/60" aria-hidden="true" />
-        <span className="font-heading text-[12px] tracking-[0.16em] text-foreground/70 uppercase">
+        {/* HUD Eck-Klammern im Header */}
+        <span className="absolute top-1 left-1 size-2 border-t border-l border-cyan-300/40" aria-hidden="true" />
+        <span className="absolute top-1 right-1 size-2 border-t border-r border-cyan-300/40" aria-hidden="true" />
+        <Icon className="size-3.5 text-cyan-300/70" aria-hidden="true" style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.5))" }} />
+        <span className="font-heading text-[12px] tracking-[0.16em] text-cyan-100/80 uppercase">
           {def.title}
         </span>
         <span className="ml-2 truncate font-mono text-[10px] text-muted-foreground/60">
@@ -259,7 +262,10 @@ export default function NovaWindow({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto" data-testid={`window-body-${win.id}`}>
+      <div className="relative min-h-0 flex-1 overflow-auto" data-testid={`window-body-${win.id}`}>
+        {/* HUD Eck-Klammern im Body */}
+        <span className="pointer-events-none absolute bottom-1 left-1 size-2 border-b border-l border-cyan-300/30" aria-hidden="true" />
+        <span className="pointer-events-none absolute bottom-1 right-1 size-2 border-b border-r border-cyan-300/30" aria-hidden="true" />
         {children}
       </div>
 

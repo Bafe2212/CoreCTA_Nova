@@ -7,6 +7,12 @@ import NovaWindow from "@/components/nova/NovaWindow";
 import type { DragInfo } from "@/components/nova/NovaWindow";
 import AppContent from "@/components/nova/AppContent";
 import CommandPalette from "@/components/nova/CommandPalette";
+import HudBackground from "@/components/nova/HudBackground";
+import BootSequence from "@/components/nova/BootSequence";
+import HudDock from "@/components/nova/HudDock";
+import ChatPanel from "@/components/nova/ChatPanel";
+import MusicWidget from "@/components/nova/MusicWidget";
+import DeskView from "@/components/nova/DeskView";
 import { apiPost } from "@/lib/api";
 import {
   APPS,
@@ -18,16 +24,19 @@ import {
   type CommandResult,
   type OrbState,
 } from "@/lib/nova";
-import { DOCK_HEIGHT, useViewport, useWindowManager } from "@/hooks/useWindowManager";
+import { useViewport, useWindowManager } from "@/hooks/useWindowManager";
 import { useVoice } from "@/hooks/useVoice";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useChatStream } from "@/hooks/useChatStream";
 import { useProviders } from "@/hooks/useNovaData";
 
-const ORB_SIZE = 340;
-const DOCK_SCALE = 0.2;
+const ORB_SIZE = 420;
 /** spoken or typed commands that put NOVA back to sleep */
 const SLEEP_RE = /^(beenden|beende|beenden bitte|schlafen|schlaf|standby|aus|ausschalten|schluss|stopp|stop|feierabend|gute nacht)[.!]?$/i;
+/** Sprachbefehle für die neuen HUD-Widgets */
+const MUSIC_RE = /^(zeige|zeig|öffne|öffne|starte)?\s*(die\s*)?(music|musik)(\s*widget)?(\s*an)?$/i;
+const DESK_RE = /^(zeige|zeig|öffne|öffne|starte)?\s*(die\s*)?(desk|tisch|kamera|camera)(\s*view)?(\s*ansicht)?(\s*an)?$/i;
+const CHAT_RE = /^(zeige|zeig|öffne|öffne|starte)?\s*(den|die)?\s*(chat)(\s*panel)?(\s*an)?$/i;
 
 export default function Home() {
   const viewport = useViewport();
@@ -48,7 +57,12 @@ export default function Home() {
   const standbyRef = useRef<() => void>(() => undefined);
   const timers = useRef<number[]>([]);
 
-  const docked = wm.windows.length > 0;
+  // JARVIS HUD: schwebende Panels / Widgets
+  const [booted, setBooted] = useState(false);
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [deskOpen, setDeskOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const later = useCallback((fn: () => void, ms: number) => {
     const t = window.setTimeout(fn, ms);
@@ -162,6 +176,25 @@ export default function Home() {
         standbyRef.current();
         return;
       }
+      // JARVIS HUD: Sprachbefehle für Widgets
+      if (MUSIC_RE.test(value)) {
+        setMusicOpen((v) => !v);
+        setOrbState("erfolg");
+        later(() => setOrbState("idle"), 1200);
+        return;
+      }
+      if (DESK_RE.test(value)) {
+        setDeskOpen((v) => !v);
+        setOrbState("erfolg");
+        later(() => setOrbState("idle"), 1200);
+        return;
+      }
+      if (CHAT_RE.test(value)) {
+        setChatPanelOpen((v) => !v);
+        setOrbState("erfolg");
+        later(() => setOrbState("idle"), 1200);
+        return;
+      }
       setPhase("active");
       command.mutate(value);
     },
@@ -224,6 +257,10 @@ export default function Home() {
     wm.closeAll();
     setMenuOpen(false);
     setNotice(null);
+    setChatPanelOpen(false);
+    setMusicOpen(false);
+    setDeskOpen(false);
+    setSettingsOpen(false);
     setPhase("standby");
   }, [speech, voice, chatStream, wm]);
 
@@ -288,31 +325,19 @@ export default function Home() {
   }, [paletteOpen, menuOpen, wm, voice, speech, phase, activate]);
 
   const theme = ORB_THEMES[displayState];
-  const orbY = docked ? viewport.h - 100 - ORB_SIZE / 2 : viewport.h * 0.42 - ORB_SIZE / 2;
+  // JARVIS: der zentrale Kreis bleibt IMMER in der Bildschirmmitte sichtbar
+  const orbY = viewport.h * 0.5 - ORB_SIZE / 2;
 
   return (
     <main
-      className="relative h-screen w-screen overflow-hidden bg-[#03070d] select-none"
+      className="relative h-screen w-screen overflow-hidden bg-[#02060c] select-none"
       data-testid="nova-desktop"
     >
-      {/* faint HUD dot grid — appears when NOVA is awake */}
-      <motion.div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage: [
-            "linear-gradient(rgba(125,205,225,0.075) 1px, transparent 1px)",
-            "linear-gradient(90deg, rgba(125,205,225,0.075) 1px, transparent 1px)",
-            "radial-gradient(rgba(148,197,214,0.16) 1px, transparent 1px)",
-          ].join(","),
-          backgroundSize: "58px 58px, 58px 58px, 29px 29px",
-          maskImage: "radial-gradient(80% 75% at 50% 50%, black, transparent 100%)",
-          WebkitMaskImage: "radial-gradient(80% 75% at 50% 50%, black, transparent 100%)",
-        }}
-        animate={{ opacity: phase === "active" ? 0.85 : 0 }}
-        transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-        data-testid="hud-grid"
-        data-hud-visible={phase === "active"}
-      />
+      {/* Boot-Sequence einmal beim App-Start */}
+      {booted ? null : <BootSequence onDone={() => setBooted(true)} />}
+
+      {/* JARVIS HUD Hintergrund: Grid, Partikel, Scan-Linie, Vignette */}
+      <HudBackground active={phase === "active"} />
 
       {/* corner brackets */}
       <motion.div
@@ -338,16 +363,9 @@ export default function Home() {
       <div
         className="pointer-events-none absolute inset-0 animate-[nova-drift_26s_ease-in-out_infinite]"
         style={{
-          background: `radial-gradient(60% 45% at 50% ${docked ? "88%" : "42%"}, ${theme.glow}, transparent 70%)`,
+          background: `radial-gradient(60% 45% at 50% 50%, ${theme.glow}, transparent 70%)`,
           opacity: 0.5,
           transition: "background 1200ms ease",
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 50%, transparent 40%, rgba(0,0,0,0.55) 100%)",
         }}
       />
 
@@ -487,13 +505,100 @@ export default function Home() {
         </div>
       )}
 
+      {/* === JARVIS HUD: schwebende Panels === */}
+
+      {/* Chat-Panel links (floating, halbtransparent) */}
+      <ChatPanel
+        open={chatPanelOpen}
+        onClose={() => setChatPanelOpen(false)}
+        chat={{
+          provider,
+          model,
+          streaming: chatStream.streaming,
+          pending: chatStream.pending,
+          partial: chatStream.partial,
+          error: chatStream.error,
+          send: chatStream.send,
+          stop: chatStream.stop,
+        }}
+      />
+
+      {/* Music-Widget rechts (floating, halbtransparent) */}
+      <MusicWidget open={musicOpen} onClose={() => setMusicOpen(false)} />
+
+      {/* Desk-View Overlay (Kamerabild über dem Grid) */}
+      <DeskView open={deskOpen} onClose={() => setDeskOpen(false)} />
+
+      {/* Settings-Panel rechts (optional, wie im Video) */}
+      <AnimatePresence>
+        {settingsOpen && (
+          <motion.div
+            className="absolute z-[220]"
+            style={{ right: 24, top: 80, bottom: 110, width: "min(380px, 30vw)" }}
+            initial={{ opacity: 0, x: 50, scale: 0.95, filter: "blur(8px)" }}
+            animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0)" }}
+            exit={{ opacity: 0, x: 50, scale: 0.95, filter: "blur(8px)" }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            data-testid="settings-panel"
+          >
+            <div
+              className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-cyan-400/25 bg-[#050b13]/75 backdrop-blur-xl"
+              style={{
+                boxShadow:
+                  "0 0 40px -10px rgba(34,211,238,0.4), inset 0 0 30px rgba(34,211,238,0.05)",
+              }}
+            >
+              <div className="min-h-0 flex-1 overflow-auto">
+                <AppContent
+                  id="einstellungen"
+                  orbState={orbState}
+                  setOrbState={setOrbState}
+                  llm={{ provider, model, setProvider, setModel }}
+                  speech={{
+                    supported: speech.supported,
+                    enabled: speechEnabled,
+                    speaking: speech.speaking,
+                    elevenlabs: speech.elevenlabs,
+                    voiceId: speech.voiceId,
+                    setVoiceId: speech.setVoiceId,
+                    setEnabled: (v: boolean) => {
+                      setSpeechEnabled(v);
+                      if (!v) speech.stop();
+                    },
+                    test: () =>
+                      speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
+                  }}
+                  voice={{
+                    supported: voice.supported,
+                    wakeEnabled: voice.wakeEnabled,
+                    wakeActive: voice.wakeActive,
+                    setWakeEnabled: voice.setWakeEnabled,
+                  }}
+                  session={{ openCount: wm.windows.length, reset: wm.resetSession }}
+                  chat={{
+                    provider,
+                    model,
+                    streaming: chatStream.streaming,
+                    pending: chatStream.pending,
+                    partial: chatStream.partial,
+                    error: chatStream.error,
+                    send: chatStream.send,
+                    stop: chatStream.stop,
+                  }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* standby: just the dimmed sphere, the time and a whisper of a hint */}
       <AnimatePresence>
         {phase === "standby" && (
           <motion.div
             key="standby"
             className="pointer-events-none absolute inset-x-0 z-[120] flex flex-col items-center"
-            style={{ top: viewport.h * 0.42 + ORB_SIZE / 2 + 26 }}
+            style={{ top: viewport.h * 0.5 + ORB_SIZE / 2 + 26 }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -14, filter: "blur(6px)", transition: { duration: 0.5 } }}
@@ -527,13 +632,13 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* centre stage — only while nothing is open */}
+      {/* centre stage — Befehls-Eingabe unter dem zentralen Kreis */}
       <AnimatePresence>
-        {!docked && phase === "active" && (
+        {phase === "active" && (
           <motion.div
             key="stage"
             className="absolute inset-x-0 z-[120] flex flex-col items-center"
-            style={{ top: viewport.h * 0.42 + ORB_SIZE / 2 + 16 }}
+            style={{ top: viewport.h * 0.5 + ORB_SIZE / 2 + 16 }}
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10, transition: { duration: 0.22 } }}
@@ -601,12 +706,12 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* the orb — permanent anchor, transform-only between centre and dock */}
+      {/* the orb — JARVIS: IMMER zentral in der Bildschirmmitte, bleibt sichtbar */}
       <motion.button
         type="button"
         aria-label={voice.listening ? "Zuhören beenden" : "NOVA zuhören lassen"}
         data-testid="nova-orb"
-        data-orb-mode={docked ? "dock" : "center"}
+        data-orb-mode="center"
         data-orb-phase={phase}
         data-listening={voice.listening}
         onClick={onOrbClick}
@@ -619,13 +724,18 @@ export default function Home() {
         }}
         className="absolute top-0 left-1/2 z-[200] cursor-pointer rounded-full outline-none"
         style={{ width: ORB_SIZE, height: ORB_SIZE }}
-        animate={{ x: -ORB_SIZE / 2, y: orbY, scale: docked ? DOCK_SCALE : 1 }}
+        animate={{
+          x: -ORB_SIZE / 2,
+          y: orbY,
+          // beim Aktivieren (Sprache/Klick) wird der Kreis größer und leuchtet stärker
+          scale: voice.listening || speech.speaking ? 1.08 : 1,
+        }}
         transition={{ type: "spring", stiffness: 190, damping: 24, mass: 0.9 }}
       >
         <Orb
           state={displayState}
           size={ORB_SIZE}
-          label={!docked}
+          label
           getLevel={voice.getLevel}
           variant={phase}
         />
@@ -636,10 +746,7 @@ export default function Home() {
         {voice.listening && (
           <motion.div
             className="pointer-events-none absolute inset-x-0 z-[210] flex flex-col items-center gap-2 px-6"
-            style={{
-              top: docked ? undefined : viewport.h * 0.42 + ORB_SIZE / 2 + 178,
-              bottom: docked ? DOCK_HEIGHT + 18 : undefined,
-            }}
+            style={{ top: viewport.h * 0.5 + ORB_SIZE / 2 + 24 }}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
@@ -665,8 +772,8 @@ export default function Home() {
       <AnimatePresence>
         {menuOpen && (
           <motion.div
-            className="absolute left-1/2 z-[260] w-[min(420px,88vw)] -translate-x-1/2 rounded-xl border border-white/[0.07] bg-[#050b13]/92 p-4 backdrop-blur-xl"
-            style={{ bottom: docked ? DOCK_HEIGHT + 24 : undefined, top: docked ? undefined : viewport.h * 0.42 + ORB_SIZE / 2 + 175 }}
+            className="absolute left-1/2 z-[260] w-[min(420px,88vw)] -translate-x-1/2 rounded-xl border border-cyan-400/20 bg-[#050b13]/92 p-4 backdrop-blur-xl"
+            style={{ top: viewport.h * 0.5 + ORB_SIZE / 2 + 24 }}
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -751,62 +858,78 @@ export default function Home() {
               >
                 Neuer Befehl (⌘K)
               </button>
-              {docked && (
-                <button
-                  type="button"
-                  data-testid="orb-menu-focus-nova"
-                  onClick={() => {
-                    wm.closeAll();
-                    setMenuOpen(false);
-                  }}
-                  className="font-mono text-[11px] text-muted-foreground/70 transition-colors duration-200 hover:text-foreground"
-                >
-                  NOVA in den Vordergrund
-                </button>
-              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* dock — only once NOVA has opened something */}
-      <AnimatePresence>
-        {docked && (
-          <motion.div
-            className="absolute inset-x-0 bottom-0 z-[180] flex h-[46px] items-center justify-center gap-1.5"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            data-testid="nova-dock"
-          >
-            {APPS.map((app) => {
-              const win = wm.windows.find((w) => w.id === app.id);
-              return (
-                <button
-                  key={app.id}
-                  type="button"
-                  aria-label={`${app.title} öffnen`}
-                  data-testid={`dock-app-${app.id}`}
-                  onClick={() => wm.open(app.id)}
-                  className="group relative grid size-8 place-items-center rounded-lg transition-colors duration-200 hover:bg-white/[0.05]"
-                >
-                  <app.icon
-                    className="size-3.5 transition-colors duration-200"
-                    style={{ color: win ? "rgba(103,232,249,0.85)" : "rgba(148,163,184,0.5)" }}
+      {/* === JARVIS HUD-Dock: untere Icon-Leiste (immer sichtbar wenn aktiv) === */}
+      {phase === "active" && (
+        <HudDock
+          chatOpen={chatPanelOpen}
+          musicOpen={musicOpen}
+          deskOpen={deskOpen}
+          settingsOpen={settingsOpen}
+          listening={voice.listening}
+          speaking={speech.speaking}
+          voiceSupported={voice.supported}
+          speechEnabled={speechEnabled}
+          onToggleChat={() => setChatPanelOpen((v) => !v)}
+          onToggleMusic={() => setMusicOpen((v) => !v)}
+          onToggleDesk={() => setDeskOpen((v) => !v)}
+          onToggleSettings={() => setSettingsOpen((v) => !v)}
+          onToggleVoice={() => {
+            if (voice.supported) voice.toggle();
+            else setNotice("Dieser Browser kann nicht zuhören — tippe deinen Befehl ein.");
+          }}
+          onToggleSpeech={() => {
+            setSpeechEnabled((v) => {
+              if (!v) speech.stop();
+              return !v;
+            });
+          }}
+        />
+      )}
+
+      {/* App-Shortcuts: schnelles Öffnen der NOVA-Apps über das Dock */}
+      {phase === "active" && (
+        <motion.div
+          className="absolute inset-x-0 bottom-[68px] z-[190] flex justify-center gap-1"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          data-testid="nova-app-shortcuts"
+        >
+          {APPS.map((app) => {
+            const win = wm.windows.find((w) => w.id === app.id);
+            return (
+              <button
+                key={app.id}
+                type="button"
+                aria-label={`${app.title} öffnen`}
+                data-testid={`dock-app-${app.id}`}
+                onClick={() => wm.open(app.id)}
+                className="group relative grid size-7 place-items-center rounded-lg transition-colors duration-200 hover:bg-cyan-400/10"
+              >
+                <app.icon
+                  className="size-3 transition-colors duration-200"
+                  style={{
+                    color: win ? "rgba(103,232,249,0.85)" : "rgba(148,163,184,0.45)",
+                  }}
+                />
+                {win && (
+                  <span
+                    className="absolute -bottom-0.5 size-[3px] rounded-full"
+                    style={{
+                      background: win.minimized ? "rgba(148,163,184,0.6)" : "#22d3ee",
+                    }}
                   />
-                  {win && (
-                    <span
-                      className="absolute -bottom-0.5 size-[3px] rounded-full"
-                      style={{ background: win.minimized ? "rgba(148,163,184,0.6)" : "#22d3ee" }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+                )}
+              </button>
+            );
+          })}
+        </motion.div>
+      )}
 
       <CommandPalette
         open={paletteOpen}
