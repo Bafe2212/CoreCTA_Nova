@@ -1,6 +1,11 @@
 import { motion } from "motion/react";
 import {
+  Brain,
   Camera,
+ FileText,
+  Folder,
+  Globe,
+  GraduationCap,
   MessageSquare,
   Music,
   Settings,
@@ -27,6 +32,14 @@ export interface DockAction {
   testId: string;
 }
 
+export interface AppButton {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+  onClick: () => void;
+}
+
 export default function HudDock({
   chatOpen,
   musicOpen,
@@ -36,6 +49,7 @@ export default function HudDock({
   speaking,
   voiceSupported,
   speechEnabled,
+  apps,
   onToggleChat,
   onToggleMusic,
   onToggleDesk,
@@ -51,6 +65,7 @@ export default function HudDock({
   speaking: boolean;
   voiceSupported: boolean;
   speechEnabled: boolean;
+  apps: AppButton[];
   onToggleChat: () => void;
   onToggleMusic: () => void;
   onToggleDesk: () => void;
@@ -83,6 +98,14 @@ export default function HudDock({
       onClick: onToggleDesk,
       testId: "hud-dock-desk",
     },
+    ...apps.map((app) => ({
+      id: app.id,
+      label: app.label,
+      icon: app.icon,
+      active: app.active,
+      onClick: app.onClick,
+      testId: `hud-dock-app-${app.id}`,
+    })),
     {
       id: "voice",
       label: listening ? "Zuhören beenden" : "Zuhören",
@@ -173,8 +196,8 @@ export default function HudDock({
                 />
               )}
             </button>
-            {/* Trennlinie zwischen Gruppen */}
-            {(i === 2 || i === 4) && (
+            {/* Trennlinie: nach Desk-View (vor Apps), nach Apps (vor Voice), nach Speech (vor Settings) */}
+            {(i === 2 || i === 2 + apps.length || i === 3 + apps.length) && (
               <span className="mx-1 h-6 w-px bg-cyan-400/15" aria-hidden="true" />
             )}
           </div>

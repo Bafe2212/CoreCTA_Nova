@@ -3,8 +3,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowUp } from "lucide-react";
 import Orb from "@/components/nova/Orb";
-import NovaWindow from "@/components/nova/NovaWindow";
-import type { DragInfo } from "@/components/nova/NovaWindow";
 import AppContent from "@/components/nova/AppContent";
 import CommandPalette from "@/components/nova/CommandPalette";
 import HudBackground from "@/components/nova/HudBackground";
@@ -13,6 +11,7 @@ import HudDock from "@/components/nova/HudDock";
 import ChatPanel from "@/components/nova/ChatPanel";
 import MusicWidget from "@/components/nova/MusicWidget";
 import DeskView from "@/components/nova/DeskView";
+import HudAppPanel from "@/components/nova/HudAppPanel";
 import { apiPost } from "@/lib/api";
 import {
   APPS,
@@ -48,10 +47,7 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [speechEnabled, setSpeechEnabled] = useState(true);
-  const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
-  const [phase, setPhase] = useState<"standby" | "active">(
-    wm.windows.length > 0 ? "active" : "standby",
-  );
+  const [phase, setPhase] = useState<"standby" | "active">("standby");
   const [clock, setClock] = useState(() => new Date());
   const lastActivity = useRef(Date.now());
   const standbyRef = useRef<() => void>(() => undefined);
@@ -63,6 +59,8 @@ export default function Home() {
   const [musicOpen, setMusicOpen] = useState(false);
   const [deskOpen, setDeskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // generische App-Panels (Files, Memory, Schule, Notizen, Browser)
+  const [appPanel, setAppPanel] = useState<AppId | null>(null);
 
   const later = useCallback((fn: () => void, ms: number) => {
     const t = window.setTimeout(fn, ms);
@@ -148,12 +146,16 @@ export default function Home() {
       const target: AppId = isAppId(result.open_window) ? result.open_window : "chat";
       if (target === "chat") {
         // Eine echte Frage — NOVA antwortet im Hintergrund und liest vor.
-        // Das Chat-Fenster bleibt zu; der Verlauf wird trotzdem gespeichert
-        // und erscheint, sobald man das Fenster öffnet.
+        // Das Chat-Panel bleibt zu; der Verlauf wird trotzdem gespeichert
+        // und erscheint, sobald man das Panel öffnet.
         chatStream.send(prompt);
         return;
       }
-      later(() => wm.open(target), 260);
+      // JARVIS HUD: App wird als schwebendes Panel geöffnet
+      later(() => {
+        if (target === "einstellungen") setSettingsOpen(true);
+        else setAppPanel(target);
+      }, 260);
       setOrbState("antworten");
       setNotice(result.reply);
       later(() => setOrbState("erfolg"), 1500);
@@ -226,6 +228,8 @@ export default function Home() {
   }, [voice.listening, activate]);
 
   // and slips back into standby after a long calm with nothing open
+  const anyPanelOpen =
+    chatPanelOpen || musicOpen || deskOpen || settingsOpen || appPanel !== null;
   useEffect(() => {
     const bump = () => {
       lastActivity.current = Date.now();
@@ -235,7 +239,7 @@ export default function Home() {
     const id = window.setInterval(() => {
       if (
         phase === "active" &&
-        wm.windows.length === 0 &&
+        !anyPanelOpen &&
         !voice.listening &&
         !speech.speaking &&
         Date.now() - lastActivity.current > 90000
@@ -248,7 +252,7 @@ export default function Home() {
       window.removeEventListener("keydown", bump);
       window.clearInterval(id);
     };
-  }, [phase, wm.windows.length, voice.listening, speech.speaking]);
+  }, [phase, anyPanelOpen, voice.listening, speech.speaking]);
 
   const toStandby = useCallback(() => {
     voice.stop();
@@ -261,6 +265,7 @@ export default function Home() {
     setMusicOpen(false);
     setDeskOpen(false);
     setSettingsOpen(false);
+    setAppPanel(null);
     setPhase("standby");
   }, [speech, voice, chatStream, wm]);
 
@@ -300,7 +305,7 @@ export default function Home() {
     voice.toggle();
   }, [voice, speech, phase, activate]);
 
-  // ⌘K / Ctrl+K palette, Esc closes palette → menu → topmost window
+  // ⌘K / Ctrl+K palette, Esc closes palette → menu → panels
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (phase === "standby") {
@@ -317,12 +322,29 @@ export default function Home() {
         else if (voice.listening) voice.stop();
         else if (speech.speaking) speech.stop();
         else if (menuOpen) setMenuOpen(false);
-        else if (wm.activeId) wm.close(wm.activeId);
+        // JARVIS HUD: Panels schließen
+        else if (deskOpen) setDeskOpen(false);
+        else if (musicOpen) setMusicOpen(false);
+        else if (settingsOpen) setSettingsOpen(false);
+        else if (appPanel) setAppPanel(null);
+        else if (chatPanelOpen) setChatPanelOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, menuOpen, wm, voice, speech, phase, activate]);
+  }, [
+    paletteOpen,
+    menuOpen,
+    voice,
+    speech,
+    phase,
+    activate,
+    deskOpen,
+    musicOpen,
+    settingsOpen,
+    appPanel,
+    chatPanelOpen,
+  ]);
 
   const theme = ORB_THEMES[displayState];
   // JARVIS: der zentrale Kreis bleibt IMMER in der Bildschirmmitte sichtbar
@@ -402,109 +424,6 @@ export default function Home() {
         ⌘K
       </motion.span>
 
-      {/* windows */}
-      <AnimatePresence>
-        {wm.windows
-          .filter((w) => !w.minimized)
-          .map((w) => (
-            <NovaWindow
-              key={w.id}
-              win={w}
-              active={wm.activeId === w.id}
-              viewport={viewport}
-              onFocus={() => wm.focus(w.id)}
-              onClose={() => wm.close(w.id)}
-              onMinimize={() => wm.minimize(w.id)}
-              onToggleMaximize={() => wm.toggleMaximize(w.id)}
-              onRect={(r) => wm.setRect(w.id, r)}
-              onDragState={setDragInfo}
-            >
-              <AppContent
-                id={w.id}
-                orbState={orbState}
-                setOrbState={setOrbState}
-                llm={{ provider, model, setProvider, setModel }}
-                speech={{
-                  supported: speech.supported,
-                  enabled: speechEnabled,
-                  speaking: speech.speaking,
-                  elevenlabs: speech.elevenlabs,
-                  voiceId: speech.voiceId,
-                  setVoiceId: speech.setVoiceId,
-                  setEnabled: (v: boolean) => {
-                    setSpeechEnabled(v);
-                    if (!v) speech.stop();
-                  },
-                  test: () =>
-                    speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
-                }}
-                voice={{
-                  supported: voice.supported,
-                  wakeEnabled: voice.wakeEnabled,
-                  wakeActive: voice.wakeActive,
-                  setWakeEnabled: voice.setWakeEnabled,
-                }}
-                session={{
-                  openCount: wm.windows.length,
-                  reset: wm.resetSession,
-                }}
-                chat={{
-                  provider,
-                  model,
-                  streaming: chatStream.streaming,
-                  pending: chatStream.pending,
-                  partial: chatStream.partial,
-                  error: chatStream.error,
-                  send: chatStream.send,
-                  stop: chatStream.stop,
-                }}
-              />
-            </NovaWindow>
-          ))}
-      </AnimatePresence>
-
-      {/* snap guides + half-screen preview while dragging */}
-      {dragInfo && (
-        <div className="pointer-events-none absolute inset-0 z-[185]" data-testid="snap-overlay">
-          {dragInfo.snap && (
-            <div
-              className="absolute rounded-xl border border-cyan-400/25 bg-cyan-400/[0.04]"
-              style={{
-                left: dragInfo.x,
-                top: dragInfo.y,
-                width: dragInfo.w,
-                height: dragInfo.h,
-                boxShadow: "0 0 40px -12px rgba(34,211,238,0.35)",
-                transition: "left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease",
-              }}
-              data-testid={`snap-preview-${dragInfo.snap}`}
-            />
-          )}
-          {dragInfo.guideX !== null && (
-            <div
-              className="absolute top-0 bottom-0 w-px"
-              style={{
-                left: dragInfo.guideX,
-                background:
-                  "linear-gradient(to bottom, transparent, rgba(34,211,238,0.28) 18%, rgba(34,211,238,0.28) 82%, transparent)",
-              }}
-              data-testid="snap-guide-vertical"
-            />
-          )}
-          {dragInfo.guideY !== null && (
-            <div
-              className="absolute right-0 left-0 h-px"
-              style={{
-                top: dragInfo.guideY,
-                background:
-                  "linear-gradient(to right, transparent, rgba(34,211,238,0.28) 18%, rgba(34,211,238,0.28) 82%, transparent)",
-              }}
-              data-testid="snap-guide-horizontal"
-            />
-          )}
-        </div>
-      )}
-
       {/* === JARVIS HUD: schwebende Panels === */}
 
       {/* Chat-Panel links (floating, halbtransparent) */}
@@ -530,67 +449,96 @@ export default function Home() {
       <DeskView open={deskOpen} onClose={() => setDeskOpen(false)} />
 
       {/* Settings-Panel rechts (optional, wie im Video) */}
-      <AnimatePresence>
-        {settingsOpen && (
-          <motion.div
-            className="absolute z-[220]"
-            style={{ right: 24, top: 80, bottom: 110, width: "min(380px, 30vw)" }}
-            initial={{ opacity: 0, x: 50, scale: 0.95, filter: "blur(8px)" }}
-            animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0)" }}
-            exit={{ opacity: 0, x: 50, scale: 0.95, filter: "blur(8px)" }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            data-testid="settings-panel"
-          >
-            <div
-              className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-cyan-400/25 bg-[#050b13]/75 backdrop-blur-xl"
-              style={{
-                boxShadow:
-                  "0 0 40px -10px rgba(34,211,238,0.4), inset 0 0 30px rgba(34,211,238,0.05)",
-              }}
-            >
-              <div className="min-h-0 flex-1 overflow-auto">
-                <AppContent
-                  id="einstellungen"
-                  orbState={orbState}
-                  setOrbState={setOrbState}
-                  llm={{ provider, model, setProvider, setModel }}
-                  speech={{
-                    supported: speech.supported,
-                    enabled: speechEnabled,
-                    speaking: speech.speaking,
-                    elevenlabs: speech.elevenlabs,
-                    voiceId: speech.voiceId,
-                    setVoiceId: speech.setVoiceId,
-                    setEnabled: (v: boolean) => {
-                      setSpeechEnabled(v);
-                      if (!v) speech.stop();
-                    },
-                    test: () =>
-                      speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
-                  }}
-                  voice={{
-                    supported: voice.supported,
-                    wakeEnabled: voice.wakeEnabled,
-                    wakeActive: voice.wakeActive,
-                    setWakeEnabled: voice.setWakeEnabled,
-                  }}
-                  session={{ openCount: wm.windows.length, reset: wm.resetSession }}
-                  chat={{
-                    provider,
-                    model,
-                    streaming: chatStream.streaming,
-                    pending: chatStream.pending,
-                    partial: chatStream.partial,
-                    error: chatStream.error,
-                    send: chatStream.send,
-                    stop: chatStream.stop,
-                  }}
-                />
-              </div>
-            </div>
-          </motion.div>
+      <HudAppPanel
+        open={settingsOpen}
+        title="Einstellungen"
+        onClose={() => setSettingsOpen(false)}
+      >
+        <AppContent
+          id="einstellungen"
+          orbState={orbState}
+          setOrbState={setOrbState}
+          llm={{ provider, model, setProvider, setModel }}
+          speech={{
+            supported: speech.supported,
+            enabled: speechEnabled,
+            speaking: speech.speaking,
+            elevenlabs: speech.elevenlabs,
+            voiceId: speech.voiceId,
+            setVoiceId: speech.setVoiceId,
+            setEnabled: (v: boolean) => {
+              setSpeechEnabled(v);
+              if (!v) speech.stop();
+            },
+            test: () =>
+              speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
+          }}
+          voice={{
+            supported: voice.supported,
+            wakeEnabled: voice.wakeEnabled,
+            wakeActive: voice.wakeActive,
+            setWakeEnabled: voice.setWakeEnabled,
+          }}
+          session={{ openCount: wm.windows.length, reset: wm.resetSession }}
+          chat={{
+            provider,
+            model,
+            streaming: chatStream.streaming,
+            pending: chatStream.pending,
+            partial: chatStream.partial,
+            error: chatStream.error,
+            send: chatStream.send,
+            stop: chatStream.stop,
+          }}
+        />
+      </HudAppPanel>
+
+      {/* Generische App-Panels (Files, Memory, Schule, Notizen, Browser) */}
+      <HudAppPanel
+        open={appPanel !== null}
+        title={appPanel ? APPS.find((a) => a.id === appPanel)?.title ?? "App" : "App"}
+        onClose={() => setAppPanel(null)}
+      >
+        {appPanel && (
+          <AppContent
+            id={appPanel}
+            orbState={orbState}
+            setOrbState={setOrbState}
+            llm={{ provider, model, setProvider, setModel }}
+            speech={{
+              supported: speech.supported,
+              enabled: speechEnabled,
+              speaking: speech.speaking,
+              elevenlabs: speech.elevenlabs,
+              voiceId: speech.voiceId,
+              setVoiceId: speech.setVoiceId,
+              setEnabled: (v: boolean) => {
+                setSpeechEnabled(v);
+                if (!v) speech.stop();
+              },
+              test: () =>
+                speech.speak("Ich bin NOVA. Ich lese dir deine Antworten ruhig vor."),
+            }}
+            voice={{
+              supported: voice.supported,
+              wakeEnabled: voice.wakeEnabled,
+              wakeActive: voice.wakeActive,
+              setWakeEnabled: voice.setWakeEnabled,
+            }}
+            session={{ openCount: wm.windows.length, reset: wm.resetSession }}
+            chat={{
+              provider,
+              model,
+              streaming: chatStream.streaming,
+              pending: chatStream.pending,
+              partial: chatStream.partial,
+              error: chatStream.error,
+              send: chatStream.send,
+              stop: chatStream.stop,
+            }}
+          />
         )}
-      </AnimatePresence>
+      </HudAppPanel>
 
       {/* standby: just the dimmed sphere, the time and a whisper of a hint */}
       <AnimatePresence>
@@ -874,6 +822,13 @@ export default function Home() {
           speaking={speech.speaking}
           voiceSupported={voice.supported}
           speechEnabled={speechEnabled}
+          apps={APPS.filter((a) => a.id !== "chat" && a.id !== "einstellungen").map((app) => ({
+            id: app.id,
+            label: app.title,
+            icon: app.icon,
+            active: appPanel === app.id,
+            onClick: () => setAppPanel((cur) => (cur === app.id ? null : app.id)),
+          }))}
           onToggleChat={() => setChatPanelOpen((v) => !v)}
           onToggleMusic={() => setMusicOpen((v) => !v)}
           onToggleDesk={() => setDeskOpen((v) => !v)}
@@ -891,50 +846,14 @@ export default function Home() {
         />
       )}
 
-      {/* App-Shortcuts: schnelles Öffnen der NOVA-Apps über das Dock */}
-      {phase === "active" && (
-        <motion.div
-          className="absolute inset-x-0 bottom-[68px] z-[190] flex justify-center gap-1"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-          data-testid="nova-app-shortcuts"
-        >
-          {APPS.map((app) => {
-            const win = wm.windows.find((w) => w.id === app.id);
-            return (
-              <button
-                key={app.id}
-                type="button"
-                aria-label={`${app.title} öffnen`}
-                data-testid={`dock-app-${app.id}`}
-                onClick={() => wm.open(app.id)}
-                className="group relative grid size-7 place-items-center rounded-lg transition-colors duration-200 hover:bg-cyan-400/10"
-              >
-                <app.icon
-                  className="size-3 transition-colors duration-200"
-                  style={{
-                    color: win ? "rgba(103,232,249,0.85)" : "rgba(148,163,184,0.45)",
-                  }}
-                />
-                {win && (
-                  <span
-                    className="absolute -bottom-0.5 size-[3px] rounded-full"
-                    style={{
-                      background: win.minimized ? "rgba(148,163,184,0.6)" : "#22d3ee",
-                    }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </motion.div>
-      )}
-
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        onSelect={(id) => wm.open(id)}
+        onSelect={(id) => {
+          if (id === "chat") setChatPanelOpen(true);
+          else if (id === "einstellungen") setSettingsOpen(true);
+          else setAppPanel(id);
+        }}
       />
     </main>
   );
